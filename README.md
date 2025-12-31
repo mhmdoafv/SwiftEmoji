@@ -22,7 +22,7 @@ dependencies: [
 
 ## Targets
 
-| Target | Description |
+| Target | Description |∫
 |--------|-------------|
 | `SwiftEmojiIndex` | Emoji data, fetching, caching, searching. No UI dependencies. |
 | `SwiftEmoji` | SwiftUI components. Depends on SwiftEmojiIndex. |
@@ -266,10 +266,13 @@ The shared instance automatically uses the best source for your platform and loc
 // Recommended: uses system locale, optimal source
 let provider = EmojiIndexProvider.shared
 
-// Specific locale
-let japanese = EmojiIndexProvider.recommended(locale: Locale(identifier: "ja"))
+// Change locale dynamically (UI updates automatically)
+await provider.setLocale(Locale(identifier: "ja"))
 
-// Custom source
+// Or create with specific locale
+let japanese = EmojiIndexProvider(locale: Locale(identifier: "ja"))
+
+// Custom source (advanced)
 struct MySource: EmojiDataSource {
     let identifier = "my-source"
     let displayName = "My Source"
@@ -494,17 +497,17 @@ let appleLocales = localeManager.appleLocales    // macOS only
 
 ### Recommended Setup
 
-Just use `.shared` or `.recommended()` - they handle platform/locale selection automatically:
+Just use `.shared` - it handles platform/locale selection automatically:
 
 ```swift
 // System locale (most common)
 let provider = EmojiIndexProvider.shared
 
-// User-selectable locale
-let localeManager = EmojiLocaleManager.shared
-localeManager.preferredLocale = Locale(identifier: "ja")
-let source = localeManager.recommendedDataSource()
-let provider = EmojiIndexProvider(source: source)
+// Change locale dynamically
+await provider.setLocale(Locale(identifier: "ja"))
+
+// Read current locale
+print(provider.locale)  // ja
 ```
 
 ## Models

@@ -370,15 +370,17 @@ extension View {
 
 #Preview("Localization") {
     @Previewable @State var availableLocales: [Locale] = []
-    @Previewable @State var selectedLocale: Locale = .current
-    @Previewable @State var currentProvider: EmojiIndexProvider = .shared
     @Previewable @State var showDiagnostics = true
+
+    // Single provider instance - observe it directly
+    let provider = EmojiIndexProvider.shared
 
     NavigationStack {
         List {
             // Diagnostics section
-            if showDiagnostics, let info = currentProvider.lastLoadInfo {
+            if showDiagnostics, let info = provider.lastLoadInfo {
                 Section("Diagnostics") {
+                    LabeledContent("Locale", value: provider.locale.identifier)
                     LabeledContent("Source ID", value: info.sourceIdentifier)
                     LabeledContent("Source", value: info.sourceDisplayName)
                     LabeledContent("Loaded From", value: info.loadedFrom.rawValue)
@@ -388,9 +390,9 @@ extension View {
                 .font(.caption)
             }
 
-            // Emoji list - directly observe currentEmojis
+            // Emoji list - directly observe provider.currentEmojis
             Section("Emoji (First 50)") {
-                ForEach(currentProvider.currentEmojis.prefix(50)) { emoji in
+                ForEach(provider.currentEmojis.prefix(50)) { emoji in
                     HStack {
                         Text(emoji.character)
                             .font(.title2)
@@ -405,15 +407,15 @@ extension View {
                     }
                 }
             }
-            .opacity(currentProvider.isLoading ? 0.5 : 1)
+            .opacity(provider.isLoading ? 0.5 : 1)
         }
-        .navigationTitle(currentProvider.sourceIdentifier)
+        .navigationTitle(provider.locale.identifier.uppercased())
         .overlay {
-            if currentProvider.isLoading {
+            if provider.isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
                         .scaleEffect(1.5)
-                    Text("Fetching \(selectedLocale.identifier) emoji data...")
+                    Text("Loading \(provider.locale.identifier) emoji...")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -426,18 +428,25 @@ extension View {
                 Menu {
                     ForEach(availableLocales, id: \.identifier) { locale in
                         Button {
-                            selectedLocale = locale
+                            Task {
+                                await provider.setLocale(locale)
+                            }
                         } label: {
-                            Text(locale.localizedDisplayName)
+                            HStack {
+                                Text(locale.localizedDisplayName)
+                                if locale.identifier == provider.locale.identifier {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
                 } label: {
                     HStack {
-                        Text(availableLocales.isEmpty ? "Loading..." : currentProvider.lastLoadInfo?.sourceIdentifier.replacingOccurrences(of: "cldr-", with: "").uppercased() ?? "...")
+                        Text(availableLocales.isEmpty ? "Loading..." : provider.locale.identifier.uppercased())
                         Image(systemName: "chevron.down")
                     }
                 }
-                .disabled(currentProvider.isLoading || availableLocales.isEmpty)
+                .disabled(provider.isLoading || availableLocales.isEmpty)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -449,13 +458,13 @@ extension View {
                     Button("Clear All Caches", role: .destructive) {
                         Task {
                             try? await DiskCache.shared.clearAll()
-                            try? await currentProvider.clearCacheAndReload()
+                            try? await provider.clearCacheAndReload()
                         }
                     }
 
                     Button("Force Refresh") {
                         Task {
-                            try? await currentProvider.refresh()
+                            try? await provider.refresh()
                         }
                     }
                 } label: {
@@ -463,17 +472,11 @@ extension View {
                 }
             }
         }
-        .onChange(of: selectedLocale) { _, locale in
-            currentProvider = EmojiIndexProvider.recommended(locale: locale)
-            Task {
-                try? await currentProvider.load()
-            }
-        }
         .task {
             // Fetch available locales
             availableLocales = await EmojiLocaleManager.shared.fetchAvailableLocales()
             // Trigger initial load
-            try? await currentProvider.load()
+            try? await provider.load()
         }
     }
 }

@@ -13,20 +13,26 @@ import Observation
 /// let emojis = try await EmojiIndexProvider.shared.allEmojis
 /// let results = await EmojiIndexProvider.shared.search("smile")
 ///
-/// // Custom locale
-/// let provider = EmojiIndexProvider.recommended(locale: Locale(identifier: "ja"))
+/// // Change locale dynamically
+/// await EmojiIndexProvider.shared.setLocale(Locale(identifier: "ja"))
 ///
-/// // Custom data source
+/// // Create with specific locale
+/// let provider = EmojiIndexProvider(locale: Locale(identifier: "ja"))
+///
+/// // Custom data source (advanced)
 /// let customIndex = EmojiIndexProvider(source: MyCustomDataSource())
 /// ```
 @Observable
 public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     /// Shared instance using the recommended data source for the current platform and locale.
-    public static let shared = EmojiIndexProvider.recommended()
+    public static let shared = EmojiIndexProvider()
 
     // MARK: - Configuration
 
-    private let source: any EmojiDataSource
+    /// The current locale for emoji names (observable).
+    public private(set) var locale: Locale
+
+    private var source: any EmojiDataSource
     private let cache: any EmojiCache
     private let customFallbackURL: URL?
 
@@ -93,7 +99,23 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
 
     // MARK: - Initialization
 
-    /// Creates a new index provider with a specific data source.
+    /// Creates an index provider with the recommended data source for the specified locale.
+    ///
+    /// This automatically selects the best data source for the platform:
+    /// - **macOS**: Apple CoreEmoji (localized) + Gemoji (shortcodes)
+    /// - **iOS/visionOS**: Unicode CLDR (localized) + Gemoji (shortcodes)
+    ///
+    /// - Parameter locale: The locale for emoji names (default: system locale)
+    public init(locale: Locale = .current) {
+        self.locale = locale
+        self.source = Self.makeRecommendedSource(for: locale)
+        self.cache = DiskCache.shared
+        self.customFallbackURL = nil
+    }
+
+    /// Creates an index provider with a custom data source.
+    ///
+    /// Use this for advanced customization when you need a specific data source.
     ///
     /// - Parameters:
     ///   - source: The data source to fetch emoji data from
@@ -105,36 +127,60 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
         cache: any EmojiCache = DiskCache.shared,
         fallbackURL: URL? = nil
     ) {
+        self.locale = .current
         self.source = source
         self.cache = cache
         self.customFallbackURL = fallbackURL
     }
 
+    // MARK: - Locale
+
+    /// Changes the locale and reloads emoji data.
+    ///
+    /// This updates the data source to use the new locale and triggers a reload.
+    /// The UI will update automatically as `currentEmojis` changes.
+    ///
+    /// - Parameter newLocale: The new locale for emoji names
+    public func setLocale(_ newLocale: Locale) async {
+        guard newLocale.identifier != locale.identifier else { return }
+
+        locale = newLocale
+        source = Self.makeRecommendedSource(for: newLocale)
+
+        // Reset state
+        lock.withLock {
+            byCharacter = [:]
+            byShortcode = [:]
+        }
+        isLoaded = false
+        currentEmojis = []
+        currentCategories = [:]
+        lastUpdated = nil
+        lastLoadInfo = nil
+
+        // Reload
+        try? await load()
+    }
+
     // MARK: - Factory Methods
 
-    /// Creates an index with the recommended data source for the current platform and locale.
-    ///
-    /// This automatically selects the best data source:
-    /// - **macOS**: Apple CoreEmoji (localized) + Gemoji (shortcodes)
-    /// - **iOS/visionOS**: Unicode CLDR (localized) + Gemoji (shortcodes)
-    ///
-    /// - Parameter locale: The locale for emoji names (default: system locale)
-    /// - Returns: A configured `EmojiIndexProvider`
-    public static func recommended(locale: Locale = .current) -> EmojiIndexProvider {
+    /// Creates the recommended data source for a locale.
+    private static func makeRecommendedSource(for locale: Locale) -> any EmojiDataSource {
         #if os(macOS)
         if AppleEmojiDataSource.isAvailable {
-            return EmojiIndexProvider(source: BlendedEmojiDataSource(
+            return BlendedEmojiDataSource(
                 primary: AppleEmojiDataSource(locale: locale),
                 secondary: GemojiDataSource.shared
-            ))
+            )
         }
         #endif
 
-        return EmojiIndexProvider(source: BlendedEmojiDataSource(
+        return BlendedEmojiDataSource(
             primary: CLDREmojiDataSource(locale: locale),
             secondary: GemojiDataSource.shared
-        ))
+        )
     }
+
 
     // MARK: - EmojiIndexProtocol
 
