@@ -3,8 +3,8 @@ import SwiftEmojiIndex
 
 /// A grid view for displaying and selecting emojis.
 ///
-/// `EmojiGrid` provides a flexible way to display emojis. The actual layout
-/// is controlled entirely by the style - use `.emojiGridStyle()` to customize.
+/// `EmojiGrid` provides a flexible way to display emojis. The layout
+/// is controlled by the style - use `.emojiGridStyle()` to customize.
 ///
 /// It does NOT include a ScrollView - you wrap it yourself for full control.
 ///
@@ -37,17 +37,18 @@ import SwiftEmojiIndex
 /// ## Styling
 ///
 /// ```swift
-/// EmojiGrid(emojis: emojis) { _ in }
+/// EmojiGrid(emojis: emojis, selection: $selected)
 ///     .emojiGridStyle(LargeEmojiGridStyle())
 /// ```
-public struct EmojiGrid<Style: EmojiGridStyle>: View {
+public struct EmojiGrid: View {
     private let emojis: [Emoji]
-    private let style: Style
     private let onTap: ((Emoji) -> Void)?
     private let selectionMode: SelectionMode
 
     @Binding private var singleSelection: Emoji?
     @Binding private var multipleSelection: Set<String>
+
+    @Environment(\.emojiGridStyle) private var style
 
     private enum SelectionMode {
         case none
@@ -55,90 +56,42 @@ public struct EmojiGrid<Style: EmojiGridStyle>: View {
         case multiple
     }
 
-    // MARK: - Tap-only Initializer
+    // MARK: - Tap-only
 
     /// Creates an emoji grid with tap-only interaction.
     public init(
         emojis: [Emoji],
-        style: Style = DefaultEmojiGridStyle() as! Style,
         onTap: @escaping (Emoji) -> Void
     ) {
         self.emojis = emojis
-        self.style = style
         self.onTap = onTap
         self.selectionMode = .none
         self._singleSelection = .constant(nil)
         self._multipleSelection = .constant([])
     }
 
-    /// Creates an emoji grid with tap-only interaction and custom style.
-    public init(
-        emojis: [Emoji],
-        style: Style,
-        onTap: @escaping (Emoji) -> Void
-    ) {
-        self.emojis = emojis
-        self.style = style
-        self.onTap = onTap
-        self.selectionMode = .none
-        self._singleSelection = .constant(nil)
-        self._multipleSelection = .constant([])
-    }
-
-    // MARK: - Single Selection Initializers
+    // MARK: - Single Selection
 
     /// Creates an emoji grid with single selection.
     public init(
         emojis: [Emoji],
-        style: Style = DefaultEmojiGridStyle() as! Style,
         selection: Binding<Emoji?>
     ) {
         self.emojis = emojis
-        self.style = style
         self.onTap = nil
         self.selectionMode = .single
         self._singleSelection = selection
         self._multipleSelection = .constant([])
     }
 
-    /// Creates an emoji grid with single selection and custom style.
-    public init(
-        emojis: [Emoji],
-        style: Style,
-        selection: Binding<Emoji?>
-    ) {
-        self.emojis = emojis
-        self.style = style
-        self.onTap = nil
-        self.selectionMode = .single
-        self._singleSelection = selection
-        self._multipleSelection = .constant([])
-    }
-
-    // MARK: - Multiple Selection Initializers
+    // MARK: - Multiple Selection
 
     /// Creates an emoji grid with multiple selection.
     public init(
         emojis: [Emoji],
-        style: Style = DefaultEmojiGridStyle() as! Style,
         selection: Binding<Set<String>>
     ) {
         self.emojis = emojis
-        self.style = style
-        self.onTap = nil
-        self.selectionMode = .multiple
-        self._singleSelection = .constant(nil)
-        self._multipleSelection = selection
-    }
-
-    /// Creates an emoji grid with multiple selection and custom style.
-    public init(
-        emojis: [Emoji],
-        style: Style,
-        selection: Binding<Set<String>>
-    ) {
-        self.emojis = emojis
-        self.style = style
         self.onTap = nil
         self.selectionMode = .multiple
         self._singleSelection = .constant(nil)
@@ -148,13 +101,13 @@ public struct EmojiGrid<Style: EmojiGridStyle>: View {
     // MARK: - Body
 
     public var body: some View {
-        style.makeGrid(configuration: GridConfiguration(
+        AnyView(style.makeGrid(configuration: GridConfiguration(
             emojis: emojis,
             selection: currentSelection,
             isSelectable: selectionMode != .none,
             isSelected: isEmojiSelected,
             onTap: handleTap
-        ))
+        )))
     }
 
     // MARK: - Private
@@ -200,6 +153,26 @@ public struct EmojiGrid<Style: EmojiGridStyle>: View {
     }
 }
 
+// MARK: - Environment
+
+private struct EmojiGridStyleKey: EnvironmentKey {
+    static let defaultValue: any EmojiGridStyle = DefaultEmojiGridStyle()
+}
+
+extension EnvironmentValues {
+    var emojiGridStyle: any EmojiGridStyle {
+        get { self[EmojiGridStyleKey.self] }
+        set { self[EmojiGridStyleKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Sets the style for emoji grids within this view.
+    public func emojiGridStyle<S: EmojiGridStyle>(_ style: S) -> some View {
+        environment(\.emojiGridStyle, style)
+    }
+}
+
 // MARK: - Previews
 
 #if DEBUG
@@ -225,14 +198,16 @@ private struct PreviewWrapper: View {
 
                 Text("Large style")
                     .font(.headline)
-                EmojiGrid(emojis: sampleEmojis, style: LargeEmojiGridStyle(), selection: $multipleSelection)
+                EmojiGrid(emojis: sampleEmojis, selection: $multipleSelection)
+                    .emojiGridStyle(LargeEmojiGridStyle())
 
                 Text("Compact style")
                     .font(.headline)
                 ScrollView(.horizontal) {
-                    EmojiGrid(emojis: sampleEmojis, style: CompactEmojiGridStyle()) { emoji in
+                    EmojiGrid(emojis: sampleEmojis) { emoji in
                         print("Tapped: \(emoji.character)")
                     }
+                    .emojiGridStyle(CompactEmojiGridStyle())
                 }
             }
             .padding()

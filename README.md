@@ -82,10 +82,11 @@ let results = await EmojiIndexProvider.shared.search("smile")
 
 ## Styling
 
-The style controls all layout and appearance. Pass it directly to the grid:
+The style controls all layout and appearance:
 
 ```swift
-EmojiGrid(emojis: emojis, style: LargeEmojiGridStyle(), selection: $selected)
+EmojiGrid(emojis: emojis, selection: $selected)
+    .emojiGridStyle(.large)
 ```
 
 ### Built-in Styles
@@ -95,14 +96,17 @@ EmojiGrid(emojis: emojis, style: LargeEmojiGridStyle(), selection: $selected)
 EmojiGrid(emojis: emojis, selection: $selected)
 
 // Default with custom size
-EmojiGrid(emojis: emojis, style: DefaultEmojiGridStyle(cellSize: 52, spacing: 8), selection: $selected)
+EmojiGrid(emojis: emojis, selection: $selected)
+    .emojiGridStyle(.default(cellSize: 52, spacing: 8))
 
 // Large - 56pt cells with backgrounds
-EmojiGrid(emojis: emojis, style: LargeEmojiGridStyle(), selection: $selected)
+EmojiGrid(emojis: emojis, selection: $selected)
+    .emojiGridStyle(.large)
 
 // Compact - horizontal 36pt cells
 ScrollView(.horizontal) {
-    EmojiGrid(emojis: emojis, style: CompactEmojiGridStyle()) { emoji in }
+    EmojiGrid(emojis: emojis) { emoji in }
+        .emojiGridStyle(.compact)
 }
 ```
 
@@ -142,7 +146,8 @@ struct MyStyle: EmojiGridStyle {
 }
 
 // Usage
-EmojiGrid(emojis: emojis, style: MyStyle(), selection: $selected)
+EmojiGrid(emojis: emojis, selection: $selected)
+    .emojiGridStyle(MyStyle())
 ```
 
 ## Data Sources

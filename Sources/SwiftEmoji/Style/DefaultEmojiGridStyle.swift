@@ -1,6 +1,30 @@
 import SwiftUI
 import SwiftEmojiIndex
 
+// MARK: - Style Shortcuts
+
+extension EmojiGridStyle where Self == DefaultEmojiGridStyle {
+    /// Default style with 44pt cells and 4pt spacing.
+    public static var `default`: DefaultEmojiGridStyle { DefaultEmojiGridStyle() }
+
+    /// Default style with custom cell size and spacing.
+    public static func `default`(cellSize: CGFloat, spacing: CGFloat = 4) -> DefaultEmojiGridStyle {
+        DefaultEmojiGridStyle(cellSize: cellSize, spacing: spacing)
+    }
+}
+
+extension EmojiGridStyle where Self == LargeEmojiGridStyle {
+    /// Large style with 56pt cells and backgrounds.
+    public static var large: LargeEmojiGridStyle { LargeEmojiGridStyle() }
+}
+
+extension EmojiGridStyle where Self == CompactEmojiGridStyle {
+    /// Compact horizontal style with 36pt cells.
+    public static var compact: CompactEmojiGridStyle { CompactEmojiGridStyle() }
+}
+
+// MARK: - Default Style
+
 /// The default emoji grid style.
 public struct DefaultEmojiGridStyle: EmojiGridStyle {
     public var cellSize: CGFloat
