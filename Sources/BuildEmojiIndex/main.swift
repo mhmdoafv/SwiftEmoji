@@ -54,6 +54,27 @@ func promptMultiChoice(_ message: String, options: [String]) -> [Int] {
     return input.split(separator: " ").compactMap { Int($0) }.filter { $0 >= 1 && $0 <= options.count }
 }
 
+func promptLocaleCodes(_ message: String, available: [String: String]) -> [String] {
+    print("\n\(message)")
+    print("\nAvailable locales:")
+    let sortedKeys = available.keys.sorted()
+    for key in sortedKeys {
+        print("  \(key) - \(available[key]!)")
+    }
+    print("\nEnter locale codes separated by spaces (e.g., 'en ja fr'), or 'all': ", terminator: "")
+
+    guard let input = readLine()?.trimmingCharacters(in: .whitespaces) else {
+        return []
+    }
+
+    if input.lowercased() == "all" {
+        return sortedKeys
+    }
+
+    let requested = input.split(separator: " ").map { String($0) }
+    return requested.filter { available.keys.contains($0) }
+}
+
 // MARK: - Data Structures
 
 struct GemojiEntry: Decodable {
@@ -358,16 +379,12 @@ func run() async throws {
         // Build from CLDR only (no shortcodes)
         printHeader("Select Locales")
 
-        let localeOptions = commonLocales.map { "\($0.value) (\($0.key))" }
-        let choices = promptMultiChoice("Which locales do you want to build?", options: localeOptions)
+        let selectedLocales = promptLocaleCodes("Which locales do you want to build?", available: commonLocales)
 
-        if choices.isEmpty {
-            print("No locales selected. Exiting.")
+        if selectedLocales.isEmpty {
+            print("No valid locales selected. Exiting.")
             return
         }
-
-        let localeKeys = Array(commonLocales.keys.sorted())
-        let selectedLocales = choices.map { localeKeys[$0 - 1] }
 
         printHeader("Building from CLDR")
 
@@ -386,16 +403,12 @@ func run() async throws {
         // Build from CLDR + Gemoji (best of both)
         printHeader("Select Locales")
 
-        let localeOptions = commonLocales.map { "\($0.value) (\($0.key))" }
-        let choices = promptMultiChoice("Which locales do you want to build?", options: localeOptions)
+        let selectedLocales = promptLocaleCodes("Which locales do you want to build?", available: commonLocales)
 
-        if choices.isEmpty {
-            print("No locales selected. Exiting.")
+        if selectedLocales.isEmpty {
+            print("No valid locales selected. Exiting.")
             return
         }
-
-        let localeKeys = Array(commonLocales.keys.sorted())
-        let selectedLocales = choices.map { localeKeys[$0 - 1] }
 
         printHeader("Building Blended (CLDR + Gemoji)")
 
@@ -431,16 +444,12 @@ func run() async throws {
             return
         }
 
-        let sortedKeys = appleLocales.keys.sorted()
-        let localeOptions = sortedKeys.map { "\(appleLocales[$0]!) (\($0))" }
-        let choices = promptMultiChoice("Which locales do you want to build?", options: localeOptions)
+        let selectedLocales = promptLocaleCodes("Which locales do you want to build?", available: appleLocales)
 
-        if choices.isEmpty {
-            print("No locales selected. Exiting.")
+        if selectedLocales.isEmpty {
+            print("No valid locales selected. Exiting.")
             return
         }
-
-        let selectedLocales = choices.map { sortedKeys[$0 - 1] }
 
         printHeader("Building from Apple CoreEmoji")
 
@@ -470,16 +479,12 @@ func run() async throws {
             return
         }
 
-        let sortedKeys = appleLocales.keys.sorted()
-        let localeOptions = sortedKeys.map { "\(appleLocales[$0]!) (\($0))" }
-        let choices = promptMultiChoice("Which locales do you want to build?", options: localeOptions)
+        let selectedLocales = promptLocaleCodes("Which locales do you want to build?", available: appleLocales)
 
-        if choices.isEmpty {
-            print("No locales selected. Exiting.")
+        if selectedLocales.isEmpty {
+            print("No valid locales selected. Exiting.")
             return
         }
-
-        let selectedLocales = choices.map { sortedKeys[$0 - 1] }
 
         printHeader("Building Blended (Apple CoreEmoji + Gemoji)")
 
