@@ -22,7 +22,7 @@ dependencies: [
 
 ## Targets
 
-| Target | Description |∫
+| Target | Description |
 |--------|-------------|
 | `SwiftEmojiIndex` | Emoji data, fetching, caching, searching. No UI dependencies. |
 | `SwiftEmoji` | SwiftUI components. Depends on SwiftEmojiIndex. |
@@ -386,6 +386,24 @@ Interactive CLI that guides you through building fallback files:
 | **Apple + Gemoji** | macOS only, localized with shortcodes |
 
 You can select multiple locales at once. Files are written to `Sources/SwiftEmojiIndex/Resources/` as `emoji-fallback-{locale}.json`.
+
+### Automated Updates
+
+A GitHub Action automatically checks for upstream changes quarterly (Jan, Apr, Jul, Oct) and creates a PR if updates are available.
+
+To trigger manually (e.g., after a Unicode emoji release):
+1. Go to Actions > "Update Emoji Fallbacks"
+2. Click "Run workflow"
+3. Optionally specify locales (comma-separated) or leave default
+
+The CLI also supports non-interactive mode for CI:
+```bash
+# Specific locales
+swift run BuildEmojiIndex --source blended --locales en,ja,ko,zh
+
+# All available locales
+swift run BuildEmojiIndex --source blended --all-locales
+```
 
 ## Caching
 

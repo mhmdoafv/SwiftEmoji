@@ -1,12 +1,114 @@
-/// BuildEmojiIndex - Interactive CLI to build offline fallback emoji indexes
+/// BuildEmojiIndex - CLI to build offline fallback emoji indexes
 ///
 /// Usage:
-///   swift run BuildEmojiIndex
+///   swift run BuildEmojiIndex                    # Interactive mode
+///   swift run BuildEmojiIndex --help             # Show help
+///   swift run BuildEmojiIndex --source blended --locales en,ja,ko
+///   swift run BuildEmojiIndex --source blended --all-locales
 ///
-/// The CLI will guide you through options interactively.
+/// Sources:
+///   gemoji   - GitHub Gemoji (English only, with shortcodes)
+///   cldr     - Unicode CLDR (localized, no shortcodes)
+///   blended  - CLDR + Gemoji (localized with shortcodes) [recommended]
+///   apple    - Apple CoreEmoji (macOS only)
+///   apple-blended - Apple + Gemoji (macOS only)
 
 import Foundation
 import SwiftEmojiIndex
+
+// MARK: - Command Line Arguments
+
+struct CLIOptions {
+    var source: String?
+    var locales: [String]?
+    var allLocales: Bool = false
+    var help: Bool = false
+
+    static func parse(_ args: [String]) -> CLIOptions {
+        var options = CLIOptions()
+        var i = 1 // Skip program name
+
+        while i < args.count {
+            let arg = args[i]
+
+            switch arg {
+            case "--help", "-h":
+                options.help = true
+            case "--source", "-s":
+                i += 1
+                if i < args.count {
+                    options.source = args[i]
+                }
+            case "--locales", "-l":
+                i += 1
+                if i < args.count {
+                    options.locales = args[i].split(separator: ",").map { String($0) }
+                }
+            case "--all-locales", "-a":
+                options.allLocales = true
+            default:
+                break
+            }
+            i += 1
+        }
+
+        return options
+    }
+
+    var isNonInteractive: Bool {
+        source != nil
+    }
+}
+
+func printHelp() {
+    var sources = """
+      gemoji        GitHub Gemoji (English only, with shortcodes)
+      cldr          Unicode CLDR (localized, no shortcodes)
+      blended       CLDR + Gemoji (localized with shortcodes) [recommended]
+    """
+
+    #if os(macOS)
+    sources += """
+
+      apple         Apple CoreEmoji (macOS only)
+      apple-blended Apple CoreEmoji + Gemoji (macOS only)
+    """
+    #endif
+
+    print("""
+    BuildEmojiIndex - Build offline fallback emoji indexes
+
+    USAGE:
+      swift run BuildEmojiIndex [OPTIONS]
+
+    OPTIONS:
+      -h, --help              Show this help message
+      -s, --source <SOURCE>   Data source to use (see below)
+      -l, --locales <CODES>   Comma-separated locale codes (e.g., en,ja,ko)
+      -a, --all-locales       Build all available locales
+
+    SOURCES:
+    \(sources)
+
+    EXAMPLES:
+      # Interactive mode
+      swift run BuildEmojiIndex
+
+      # Build English fallback from Gemoji
+      swift run BuildEmojiIndex --source gemoji
+
+      # Build specific locales with CLDR + Gemoji
+      swift run BuildEmojiIndex --source blended --locales en,ja,ko,zh
+
+      # Build all available CLDR locales
+      swift run BuildEmojiIndex --source blended --all-locales
+
+    FILES:
+      Output is written to Sources/SwiftEmojiIndex/Resources/
+      - emoji-fallback.json (English/default)
+      - emoji-fallback-{locale}.json (other locales)
+    """)
+}
 
 // MARK: - CLI Helpers
 
@@ -350,9 +452,152 @@ func writeOutput(_ entries: [FallbackEntry], locale: String?) throws {
     print("    Size: \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))")
 }
 
-// MARK: - Main
+// MARK: - Non-Interactive Mode
 
-func run() async throws {
+func runNonInteractive(_ options: CLIOptions) async throws {
+    guard let sourceName = options.source else {
+        print("Error: --source is required for non-interactive mode")
+        return
+    }
+
+    print("BuildEmojiIndex (non-interactive)")
+    print("──────────────────────────────────")
+
+    switch sourceName {
+    case "gemoji":
+        print("Source: GitHub Gemoji")
+        let gemoji = try await fetchGemoji()
+        let entries = buildFromGemoji(gemoji)
+        try writeOutput(entries, locale: nil)
+
+    case "cldr":
+        let locales = try await resolveLocales(options, available: commonLocales)
+        print("Source: Unicode CLDR")
+        print("Locales: \(locales.joined(separator: ", "))")
+
+        for locale in locales {
+            print("\n[\(locale)]")
+            do {
+                let annotations = try await fetchCLDR(locale: locale)
+                let entries = buildFromCLDR(annotations, gemojiEntries: nil)
+                try writeOutput(entries, locale: locale)
+            } catch {
+                print("  ✗ Failed: \(error.localizedDescription)")
+            }
+        }
+
+    case "blended":
+        let locales = try await resolveLocales(options, available: commonLocales)
+        print("Source: CLDR + Gemoji (blended)")
+        print("Locales: \(locales.joined(separator: ", "))")
+
+        print("\nFetching Gemoji for shortcodes...")
+        let gemoji = try await fetchGemoji()
+        print("  ✓ Loaded \(gemoji.count) Gemoji entries")
+
+        for locale in locales {
+            print("\n[\(locale)]")
+            do {
+                let annotations = try await fetchCLDR(locale: locale)
+                let entries = buildFromCLDR(annotations, gemojiEntries: gemoji)
+                try writeOutput(entries, locale: locale)
+            } catch {
+                print("  ✗ Failed: \(error.localizedDescription)")
+            }
+        }
+
+    #if os(macOS)
+    case "apple":
+        guard AppleEmojiDataSource.isAvailable else {
+            print("Error: Apple CoreEmoji is not available on this system")
+            return
+        }
+        let locales = try await resolveLocales(options, available: appleAvailableLocales())
+        print("Source: Apple CoreEmoji")
+        print("Locales: \(locales.joined(separator: ", "))")
+
+        for locale in locales {
+            print("\n[\(locale)]")
+            do {
+                let appleEntries = try await fetchApple(locale: locale)
+                let entries = buildFromApple(appleEntries, gemojiEntries: nil)
+                try writeOutput(entries, locale: locale)
+            } catch {
+                print("  ✗ Failed: \(error.localizedDescription)")
+            }
+        }
+
+    case "apple-blended":
+        guard AppleEmojiDataSource.isAvailable else {
+            print("Error: Apple CoreEmoji is not available on this system")
+            return
+        }
+        let locales = try await resolveLocales(options, available: appleAvailableLocales())
+        print("Source: Apple CoreEmoji + Gemoji (blended)")
+        print("Locales: \(locales.joined(separator: ", "))")
+
+        print("\nFetching Gemoji for shortcodes...")
+        let gemoji = try await fetchGemoji()
+        print("  ✓ Loaded \(gemoji.count) Gemoji entries")
+
+        for locale in locales {
+            print("\n[\(locale)]")
+            do {
+                let appleEntries = try await fetchApple(locale: locale)
+                let entries = buildFromApple(appleEntries, gemojiEntries: gemoji)
+                try writeOutput(entries, locale: locale)
+            } catch {
+                print("  ✗ Failed: \(error.localizedDescription)")
+            }
+        }
+    #endif
+
+    default:
+        print("Error: Unknown source '\(sourceName)'")
+        print("Valid sources: gemoji, cldr, blended" + (isAppleAvailable() ? ", apple, apple-blended" : ""))
+        return
+    }
+
+    print("\n✓ Done!")
+}
+
+func resolveLocales(_ options: CLIOptions, available: [String: String]) async throws -> [String] {
+    if options.allLocales {
+        return available.keys.sorted()
+    }
+
+    if let locales = options.locales {
+        let valid = locales.filter { available.keys.contains($0) }
+        let invalid = locales.filter { !available.keys.contains($0) }
+
+        if !invalid.isEmpty {
+            print("Warning: Unknown locales ignored: \(invalid.joined(separator: ", "))")
+        }
+
+        if valid.isEmpty {
+            throw NSError(domain: "CLI", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "No valid locales specified"
+            ])
+        }
+
+        return valid
+    }
+
+    // Default to English
+    return ["en"]
+}
+
+func isAppleAvailable() -> Bool {
+    #if os(macOS)
+    return AppleEmojiDataSource.isAvailable
+    #else
+    return false
+    #endif
+}
+
+// MARK: - Interactive Mode
+
+func runInteractive() async throws {
     print("\n🎨 BuildEmojiIndex")
     print("═══════════════════════════════════════════════════")
     print("Build offline fallback emoji data for SwiftEmojiIndex")
@@ -510,5 +755,21 @@ func run() async throws {
     print("Run your app to use the new fallback data.\n")
 }
 
-// Entry point
+// MARK: - Entry Point
+
+func run() async throws {
+    let options = CLIOptions.parse(CommandLine.arguments)
+
+    if options.help {
+        printHelp()
+        return
+    }
+
+    if options.isNonInteractive {
+        try await runNonInteractive(options)
+    } else {
+        try await runInteractive()
+    }
+}
+
 try await run()
