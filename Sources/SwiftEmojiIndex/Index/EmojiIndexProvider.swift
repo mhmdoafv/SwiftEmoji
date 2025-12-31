@@ -30,19 +30,13 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     private let cache: any EmojiCache
     private let customFallbackURL: URL?
 
-    // MARK: - State
+    // MARK: - Observable State
 
-    /// All loaded emojis.
-    private var emojis: [Emoji] = []
+    /// Current emojis (observable). Updates when data is loaded or refreshed.
+    public private(set) var currentEmojis: [Emoji] = []
 
-    /// Emojis indexed by character for O(1) lookup.
-    private var byCharacter: [String: Emoji] = [:]
-
-    /// Emojis indexed by shortcode for O(1) lookup.
-    private var byShortcode: [String: Emoji] = [:]
-
-    /// Emojis organized by category.
-    private var byCategory: [EmojiCategory: [Emoji]] = [:]
+    /// Current emojis by category (observable).
+    public private(set) var currentCategories: [EmojiCategory: [Emoji]] = [:]
 
     /// The date when data was last updated.
     public private(set) var lastUpdated: Date?
@@ -50,8 +44,19 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     /// Whether the index has been loaded.
     public private(set) var isLoaded: Bool = false
 
+    /// Whether data is currently being fetched.
+    public private(set) var isLoading: Bool = false
+
     /// Diagnostic info about the last load operation.
     public private(set) var lastLoadInfo: LoadInfo?
+
+    // MARK: - Internal State
+
+    /// Emojis indexed by character for O(1) lookup.
+    private var byCharacter: [String: Emoji] = [:]
+
+    /// Emojis indexed by shortcode for O(1) lookup.
+    private var byShortcode: [String: Emoji] = [:]
 
     /// Lock for thread-safe access.
     private let lock = NSLock()
@@ -136,14 +141,14 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     public var allEmojis: [Emoji] {
         get async throws {
             try await ensureLoaded()
-            return lock.withLock { emojis }
+            return currentEmojis
         }
     }
 
     public var categories: [EmojiCategory: [Emoji]] {
         get async throws {
             try await ensureLoaded()
-            return lock.withLock { byCategory }
+            return currentCategories
         }
     }
 
@@ -184,58 +189,56 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
 
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else {
-            let all = lock.withLock { emojis }
-            return applyRanking(all, ranking: ranking)
+            return applyRanking(currentEmojis, ranking: ranking)
         }
 
-        return lock.withLock {
-            var exactMatch: Emoji?
-            var results: [Emoji] = []
-            var seen = Set<String>()
+        let allEmojis = currentEmojis
+        var exactMatch: Emoji?
+        var results: [Emoji] = []
+        var seen = Set<String>()
 
-            // Priority 1: Exact shortcode match (will be inserted at front)
-            if let exact = byShortcode[query] {
-                exactMatch = exact
-                seen.insert(exact.character)
-            }
-
-            // Priority 2: Name contains query
-            for emoji in emojis {
-                guard !seen.contains(emoji.character) else { continue }
-                if emoji.name.lowercased().contains(query) {
-                    results.append(emoji)
-                    seen.insert(emoji.character)
-                }
-            }
-
-            // Priority 3: Shortcode prefix match
-            for emoji in emojis {
-                guard !seen.contains(emoji.character) else { continue }
-                if emoji.shortcodes.contains(where: { $0.lowercased().hasPrefix(query) }) {
-                    results.append(emoji)
-                    seen.insert(emoji.character)
-                }
-            }
-
-            // Priority 4: Keyword prefix match
-            for emoji in emojis {
-                guard !seen.contains(emoji.character) else { continue }
-                if emoji.keywords.contains(where: { $0.lowercased().hasPrefix(query) }) {
-                    results.append(emoji)
-                    seen.insert(emoji.character)
-                }
-            }
-
-            // Apply ranking
-            results = applyRanking(results, ranking: ranking)
-
-            // Insert exact match at front (always, regardless of ranking)
-            if let exact = exactMatch {
-                results.insert(exact, at: 0)
-            }
-
-            return results
+        // Priority 1: Exact shortcode match (will be inserted at front)
+        if let exact = lock.withLock({ byShortcode[query] }) {
+            exactMatch = exact
+            seen.insert(exact.character)
         }
+
+        // Priority 2: Name contains query
+        for emoji in allEmojis {
+            guard !seen.contains(emoji.character) else { continue }
+            if emoji.name.lowercased().contains(query) {
+                results.append(emoji)
+                seen.insert(emoji.character)
+            }
+        }
+
+        // Priority 3: Shortcode prefix match
+        for emoji in allEmojis {
+            guard !seen.contains(emoji.character) else { continue }
+            if emoji.shortcodes.contains(where: { $0.lowercased().hasPrefix(query) }) {
+                results.append(emoji)
+                seen.insert(emoji.character)
+            }
+        }
+
+        // Priority 4: Keyword prefix match
+        for emoji in allEmojis {
+            guard !seen.contains(emoji.character) else { continue }
+            if emoji.keywords.contains(where: { $0.lowercased().hasPrefix(query) }) {
+                results.append(emoji)
+                seen.insert(emoji.character)
+            }
+        }
+
+        // Apply ranking
+        results = applyRanking(results, ranking: ranking)
+
+        // Insert exact match at front (always, regardless of ranking)
+        if let exact = exactMatch {
+            results.insert(exact, at: 0)
+        }
+
+        return results
     }
 
     /// Apply ranking to emoji list.
@@ -263,6 +266,9 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     }
 
     public func refresh() async throws {
+        isLoading = true
+        defer { isLoading = false }
+
         let startTime = Date()
         let entries = try await source.fetch()
         try await cache.save(entries, for: source.identifier)
@@ -276,6 +282,9 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
         if lock.withLock({ isLoaded }) {
             return
         }
+
+        isLoading = true
+        defer { isLoading = false }
 
         let startTime = Date()
 
@@ -334,27 +343,30 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
             newByCategory[emoji.category, default: []].append(emoji)
         }
 
+        // Update internal indexes (thread-safe)
         lock.withLock {
-            emojis = newEmojis
             byCharacter = newByCharacter
             byShortcode = newByShortcode
-            byCategory = newByCategory
-            isLoaded = true
-            if lastUpdated == nil {
-                lastUpdated = Date()
-            }
+        }
 
-            // Record diagnostic info
-            if let loadSource = loadSource {
-                lastLoadInfo = LoadInfo(
-                    sourceIdentifier: source.identifier,
-                    sourceDisplayName: source.displayName,
-                    loadedFrom: loadSource,
-                    emojiCount: newEmojis.count,
-                    loadDuration: startTime.map { Date().timeIntervalSince($0) } ?? 0,
-                    timestamp: Date()
-                )
-            }
+        // Update observable state (triggers UI updates)
+        currentEmojis = newEmojis
+        currentCategories = newByCategory
+        isLoaded = true
+        if lastUpdated == nil {
+            lastUpdated = Date()
+        }
+
+        // Record diagnostic info
+        if let loadSource = loadSource {
+            lastLoadInfo = LoadInfo(
+                sourceIdentifier: source.identifier,
+                sourceDisplayName: source.displayName,
+                loadedFrom: loadSource,
+                emojiCount: newEmojis.count,
+                loadDuration: startTime.map { Date().timeIntervalSince($0) } ?? 0,
+                timestamp: Date()
+            )
         }
     }
 
@@ -396,13 +408,13 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
     public func clearCacheAndReload() async throws {
         try await cache.clear(for: source.identifier)
         lock.withLock {
-            isLoaded = false
-            emojis = []
             byCharacter = [:]
             byShortcode = [:]
-            byCategory = [:]
-            lastUpdated = nil
         }
+        isLoaded = false
+        currentEmojis = []
+        currentCategories = [:]
+        lastUpdated = nil
         try await refresh()
     }
 }

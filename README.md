@@ -7,7 +7,7 @@ Emoji grid and index for SwiftUI. No hidden behaviors, full customization.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/aeastr/SwiftEmoji.git", from: "1.0.0")
+    .package(url: "https://github.com/aeastr/SwiftEmoji.git", from: "0.0.1")
 ]
 
 // Target

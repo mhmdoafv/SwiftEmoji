@@ -369,17 +369,15 @@ extension View {
 }
 
 #Preview("Localization") {
-    @Previewable @State var emojis: [Emoji] = []
     @Previewable @State var availableLocales: [Locale] = []
     @Previewable @State var selectedLocale: Locale = .current
-    @Previewable @State var loadingLocale: String?
-    @Previewable @State var currentProvider: EmojiIndexProvider?
+    @Previewable @State var currentProvider: EmojiIndexProvider = .shared
     @Previewable @State var showDiagnostics = true
 
     NavigationStack {
         List {
             // Diagnostics section
-            if showDiagnostics, let provider = currentProvider, let info = provider.lastLoadInfo {
+            if showDiagnostics, let info = currentProvider.lastLoadInfo {
                 Section("Diagnostics") {
                     LabeledContent("Source ID", value: info.sourceIdentifier)
                     LabeledContent("Source", value: info.sourceDisplayName)
@@ -390,9 +388,9 @@ extension View {
                 .font(.caption)
             }
 
-            // Emoji list
-            Section("Emoji (\(emojis.count))") {
-                ForEach(emojis.prefix(50)) { emoji in
+            // Emoji list - directly observe currentEmojis
+            Section("Emoji (First 50)") {
+                ForEach(currentProvider.currentEmojis.prefix(50)) { emoji in
                     HStack {
                         Text(emoji.character)
                             .font(.title2)
@@ -407,15 +405,15 @@ extension View {
                     }
                 }
             }
-            .opacity(loadingLocale != nil ? 0.5 : 1)
+            .opacity(currentProvider.isLoading ? 0.5 : 1)
         }
-        .navigationTitle(currentProvider?.sourceIdentifier ?? "Loading...")
+        .navigationTitle(currentProvider.sourceIdentifier)
         .overlay {
-            if let loading = loadingLocale {
+            if currentProvider.isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
                         .scaleEffect(1.5)
-                    Text("Fetching \(loading) emoji data...")
+                    Text("Fetching \(selectedLocale.identifier) emoji data...")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -435,11 +433,11 @@ extension View {
                     }
                 } label: {
                     HStack {
-                        Text(availableLocales.isEmpty ? "Loading..." : (currentProvider?.lastLoadInfo?.sourceIdentifier.replacingOccurrences(of: "cldr-", with: "").uppercased() ?? "..."))
+                        Text(availableLocales.isEmpty ? "Loading..." : currentProvider.lastLoadInfo?.sourceIdentifier.replacingOccurrences(of: "cldr-", with: "").uppercased() ?? "...")
                         Image(systemName: "chevron.down")
                     }
                 }
-                .disabled(loadingLocale != nil || availableLocales.isEmpty)
+                .disabled(currentProvider.isLoading || availableLocales.isEmpty)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -451,22 +449,13 @@ extension View {
                     Button("Clear All Caches", role: .destructive) {
                         Task {
                             try? await DiskCache.shared.clearAll()
-                            // Reload current
-                            loadingLocale = selectedLocale.identifier
-                            let provider = EmojiIndexProvider.recommended(locale: selectedLocale)
-                            emojis = (try? await provider.allEmojis) ?? []
-                            currentProvider = provider
-                            loadingLocale = nil
+                            try? await currentProvider.clearCacheAndReload()
                         }
                     }
 
                     Button("Force Refresh") {
                         Task {
-                            guard let provider = currentProvider else { return }
-                            loadingLocale = selectedLocale.identifier
-                            try? await provider.refresh()
-                            emojis = (try? await provider.allEmojis) ?? []
-                            loadingLocale = nil
+                            try? await currentProvider.refresh()
                         }
                     }
                 } label: {
@@ -475,24 +464,16 @@ extension View {
             }
         }
         .onChange(of: selectedLocale) { _, locale in
+            currentProvider = EmojiIndexProvider.recommended(locale: locale)
             Task {
-                loadingLocale = locale.identifier
-                let provider = EmojiIndexProvider.recommended(locale: locale)
-                emojis = (try? await provider.allEmojis) ?? []
-                currentProvider = provider
-                loadingLocale = nil
+                try? await currentProvider.load()
             }
         }
         .task {
             // Fetch available locales
             availableLocales = await EmojiLocaleManager.shared.fetchAvailableLocales()
-
-            // Load initial emoji
-            loadingLocale = Locale.current.identifier
-            let provider = EmojiIndexProvider.shared
-            emojis = (try? await provider.allEmojis) ?? []
-            currentProvider = provider
-            loadingLocale = nil
+            // Trigger initial load
+            try? await currentProvider.load()
         }
     }
 }
