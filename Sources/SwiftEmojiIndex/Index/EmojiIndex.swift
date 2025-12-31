@@ -1,5 +1,15 @@
 import Foundation
 
+/// How search results should be ranked.
+public enum SearchRanking: Sendable {
+    /// Default relevance-based ranking: exact match > name > shortcode > keyword
+    case relevance
+    /// Sort by usage frequency/recency (requires EmojiUsageTracker)
+    case usage
+    /// Sort alphabetically by name
+    case alphabetical
+}
+
 /// Protocol for emoji index providers.
 ///
 /// An emoji index provides access to emoji data with searching and categorization.
@@ -10,11 +20,11 @@ import Foundation
 /// You can create custom index implementations for special use cases:
 ///
 /// ```swift
-/// class MyCustomIndex: EmojiIndex {
+/// class MyCustomIndex: EmojiIndexProtocol {
 ///     // Custom implementation
 /// }
 /// ```
-public protocol EmojiIndex: Sendable {
+public protocol EmojiIndexProtocol: Sendable {
     /// All available emojis.
     ///
     /// - Returns: Array of all emojis
@@ -41,7 +51,7 @@ public protocol EmojiIndex: Sendable {
 
     /// Searches for emojis matching a query.
     ///
-    /// Search priority:
+    /// Search priority (for `.relevance` ranking):
     /// 1. Exact shortcode match (pinned to top)
     /// 2. Name contains query
     /// 3. Shortcode prefix match
@@ -49,9 +59,9 @@ public protocol EmojiIndex: Sendable {
     ///
     /// - Parameters:
     ///   - query: The search query
-    ///   - rankByUsage: If true, results are sorted by usage score
-    /// - Returns: Array of matching emojis, ordered by relevance
-    func search(_ query: String, rankByUsage: Bool) async -> [Emoji]
+    ///   - ranking: How to rank results (default: `.relevance`)
+    /// - Returns: Array of matching emojis
+    func search(_ query: String, ranking: SearchRanking) async -> [Emoji]
 
     /// Get favorite emoji based on usage history.
     ///
@@ -72,9 +82,9 @@ public protocol EmojiIndex: Sendable {
 
 // MARK: - Default Implementations
 
-extension EmojiIndex {
-    /// Search without usage ranking (convenience).
+extension EmojiIndexProtocol {
+    /// Search with default relevance ranking.
     public func search(_ query: String) async -> [Emoji] {
-        await search(query, rankByUsage: false)
+        await search(query, ranking: .relevance)
     }
 }

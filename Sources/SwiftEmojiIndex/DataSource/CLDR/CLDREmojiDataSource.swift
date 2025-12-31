@@ -34,10 +34,32 @@ public struct CLDREmojiDataSource: EmojiDataSource {
     /// GitHub API URL to list available annotation directories.
     private static let apiURL = "https://api.github.com/repos/unicode-org/cldr-json/contents/cldr-json/cldr-annotations-full/annotations"
 
-    /// Cached available locales.
-    private static var cachedLocales: [Locale]?
-    private static var localesCacheDate: Date?
-    private static let localesCacheMaxAge: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+    /// Actor to manage cached locales with thread safety.
+    private actor LocalesCache {
+        static let shared = LocalesCache()
+
+        private var cachedLocales: [Locale]?
+        private var cacheDate: Date?
+        private let maxAge: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+
+        func getCached() -> [Locale]? {
+            guard let cached = cachedLocales,
+                  let date = cacheDate,
+                  Date().timeIntervalSince(date) < maxAge else {
+                return nil
+            }
+            return cached
+        }
+
+        func setCached(_ locales: [Locale]) {
+            cachedLocales = locales
+            cacheDate = Date()
+        }
+
+        func currentCached() -> [Locale]? {
+            cachedLocales
+        }
+    }
 
     /// Creates a CLDR data source for the specified locale.
     ///
@@ -53,16 +75,13 @@ public struct CLDREmojiDataSource: EmojiDataSource {
     /// Results are cached for 7 days. Falls back to common locales on error.
     public static func fetchAvailableLocales() async -> [Locale] {
         // Check cache
-        if let cached = cachedLocales,
-           let cacheDate = localesCacheDate,
-           Date().timeIntervalSince(cacheDate) < localesCacheMaxAge {
+        if let cached = await LocalesCache.shared.getCached() {
             return cached
         }
 
         do {
             let locales = try await fetchLocalesFromAPI()
-            cachedLocales = locales
-            localesCacheDate = Date()
+            await LocalesCache.shared.setCached(locales)
             return locales
         } catch {
             // Fall back to common locales
@@ -71,8 +90,10 @@ public struct CLDREmojiDataSource: EmojiDataSource {
     }
 
     /// Synchronous access to cached locales (may be empty if not fetched yet).
+    /// For fresh data, use `fetchAvailableLocales()`.
     public static var availableLocales: [Locale] {
-        cachedLocales ?? fallbackLocales
+        // Note: This is a best-effort sync access. Use fetchAvailableLocales() for guaranteed fresh data.
+        fallbackLocales
     }
 
     /// Common locales as fallback when API fetch fails.

@@ -41,11 +41,13 @@ public final class EmojiLocaleManager: @unchecked Sendable {
         preferredLocale ?? .current
     }
 
-    /// Available locales for emoji data.
+    /// Available locales for emoji data (cached).
     ///
     /// Returns the union of:
     /// - CLDR locales (all platforms)
     /// - Apple CoreEmoji locales (macOS only)
+    ///
+    /// For fresh data, use `fetchAvailableLocales()`.
     public var availableLocales: [Locale] {
         var locales = Set(CLDREmojiDataSource.availableLocales)
         #if os(macOS)
@@ -54,9 +56,25 @@ public final class EmojiLocaleManager: @unchecked Sendable {
         return locales.sorted { $0.identifier < $1.identifier }
     }
 
-    /// CLDR locales (cross-platform).
+    /// Fetches available locales from remote sources.
+    ///
+    /// Call this on app launch to populate the locale list.
+    public func fetchAvailableLocales() async -> [Locale] {
+        var locales = Set(await CLDREmojiDataSource.fetchAvailableLocales())
+        #if os(macOS)
+        locales.formUnion(appleAvailableLocales())
+        #endif
+        return locales.sorted { $0.identifier < $1.identifier }
+    }
+
+    /// CLDR locales (cross-platform, cached).
     public var cldrLocales: [Locale] {
         CLDREmojiDataSource.availableLocales
+    }
+
+    /// Fetches CLDR locales from remote.
+    public func fetchCLDRLocales() async -> [Locale] {
+        await CLDREmojiDataSource.fetchAvailableLocales()
     }
 
     /// Apple CoreEmoji locales (macOS only).
@@ -88,6 +106,31 @@ public final class EmojiLocaleManager: @unchecked Sendable {
         if let saved = UserDefaults.standard.string(forKey: storageKey) {
             preferredLocale = Locale(identifier: saved)
         }
+    }
+
+    // MARK: - Recommended Data Source
+
+    /// Returns the recommended data source for the current platform and effective locale.
+    ///
+    /// This automatically selects the best data source:
+    /// - **macOS**: Apple CoreEmoji (localized) + Gemoji (shortcodes)
+    /// - **iOS/visionOS**: Unicode CLDR (localized) + Gemoji (shortcodes)
+    public func recommendedDataSource() -> any EmojiDataSource {
+        let locale = effectiveLocale
+
+        #if os(macOS)
+        if AppleEmojiDataSource.isAvailable {
+            return BlendedEmojiDataSource(
+                primary: AppleEmojiDataSource(locale: locale),
+                secondary: GemojiDataSource.shared
+            )
+        }
+        #endif
+
+        return BlendedEmojiDataSource(
+            primary: CLDREmojiDataSource(locale: locale),
+            secondary: GemojiDataSource.shared
+        )
     }
 
     #if os(macOS)

@@ -78,7 +78,7 @@ struct EmojiPicker: View {
             .onChange(of: searchText) { _, query in
                 Task {
                     searchResults = query.isEmpty ? [] :
-                        await EmojiIndexProvider.shared.search(query, rankByUsage: true)
+                        await EmojiIndexProvider.shared.search(query, ranking: .usage)
                 }
             }
             .task {
@@ -134,14 +134,17 @@ ScrollView {
 ```swift
 let results = await EmojiIndexProvider.shared.search("smile")
 
-// Search priority:
+// Search priority (default .relevance ranking):
 // 1. Exact shortcode match ("sob" → 😭)
 // 2. Name contains query
 // 3. Shortcode prefix match
 // 4. Keyword prefix match
 
-// With usage-based ranking (frequently used emoji appear first)
-let ranked = await EmojiIndexProvider.shared.search("smile", rankByUsage: true)
+// Usage-based ranking (frequently used emoji first)
+let ranked = await EmojiIndexProvider.shared.search("smile", ranking: .usage)
+
+// Alphabetical
+let alphabetical = await EmojiIndexProvider.shared.search("smile", ranking: .alphabetical)
 ```
 
 ## Favorites & Usage Tracking
@@ -156,7 +159,7 @@ EmojiUsageTracker.shared.recordUse(emoji.character)
 let favorites = await EmojiIndexProvider.shared.favorites()
 
 // Use in search ranking
-let results = await EmojiIndexProvider.shared.search(query, rankByUsage: true)
+let results = await EmojiIndexProvider.shared.search(query, ranking: .usage)
 ```
 
 ### How It Works
@@ -255,11 +258,16 @@ EmojiGrid(emojis: emojis, selection: $selected)
 
 ## Data Sources
 
-The index fetches emoji data from remote sources. Default is GitHub Gemoji.
+The shared instance automatically uses the best source for your platform and locale:
+- **macOS**: Apple CoreEmoji (localized) + Gemoji (shortcodes)
+- **iOS/visionOS**: Unicode CLDR (localized) + Gemoji (shortcodes)
 
 ```swift
-// Default (Gemoji)
+// Recommended: uses system locale, optimal source
 let provider = EmojiIndexProvider.shared
+
+// Specific locale
+let japanese = EmojiIndexProvider.recommended(locale: Locale(identifier: "ja"))
 
 // Custom source
 struct MySource: EmojiDataSource {
@@ -441,8 +449,8 @@ let blended = BlendedEmojiDataSource(
     secondary: GemojiDataSource.shared
 )
 
-// Available locales (100+)
-let locales = CLDREmojiDataSource.availableLocales
+// Fetch available locales (async, cached for 7 days)
+let locales = await CLDREmojiDataSource.fetchAvailableLocales()
 ```
 
 ### Apple CoreEmoji (macOS)
@@ -467,8 +475,11 @@ if AppleEmojiDataSource.isAvailable {
 ```swift
 let localeManager = EmojiLocaleManager.shared
 
-// All available locales (CLDR + Apple on macOS)
-let available = localeManager.availableLocales
+// Fetch available locales (async)
+let available = await localeManager.fetchAvailableLocales()
+
+// Or use cached (sync, may be incomplete until fetched)
+let cached = localeManager.availableLocales
 
 // Set preferred locale (auto-persists to UserDefaults)
 localeManager.preferredLocale = Locale(identifier: "ja")
@@ -483,29 +494,17 @@ let appleLocales = localeManager.appleLocales    // macOS only
 
 ### Recommended Setup
 
+Just use `.shared` or `.recommended()` - they handle platform/locale selection automatically:
+
 ```swift
-func createEmojiProvider(for locale: Locale) -> EmojiIndexProvider {
-    let primary: any EmojiDataSource
+// System locale (most common)
+let provider = EmojiIndexProvider.shared
 
-    #if os(macOS)
-    if AppleEmojiDataSource.isAvailable {
-        // Prefer Apple on macOS (better quality)
-        primary = AppleEmojiDataSource(locale: locale)
-    } else {
-        primary = CLDREmojiDataSource(locale: locale)
-    }
-    #else
-    primary = CLDREmojiDataSource(locale: locale)
-    #endif
-
-    // Blend with Gemoji for shortcodes
-    let blended = BlendedEmojiDataSource(
-        primary: primary,
-        secondary: GemojiDataSource.shared
-    )
-
-    return EmojiIndexProvider(source: blended)
-}
+// User-selectable locale
+let localeManager = EmojiLocaleManager.shared
+localeManager.preferredLocale = Locale(identifier: "ja")
+let source = localeManager.recommendedDataSource()
+let provider = EmojiIndexProvider(source: source)
 ```
 
 ## Models
@@ -545,6 +544,16 @@ public enum SkinTone {
 
 let modified = emoji.withSkinTone(.medium)  // Returns emoji character with modifier
 ```
+
+## Sources
+
+This package uses the following sources for emoji data:
+
+| Source | Description | URL |
+|--------|-------------|-----|
+| **GitHub Gemoji** | Default source. Provides emoji characters, names, shortcodes, and keywords. | [github/gemoji](https://github.com/github/gemoji) |
+| **Unicode CLDR** | Localized emoji names and keywords for 100+ languages. Cross-platform. | [unicode-org/cldr-json](https://github.com/unicode-org/cldr-json) |
+| **Apple CoreEmoji** | macOS only. Higher quality localized names via Apple's private framework. | System framework |
 
 ## Requirements
 

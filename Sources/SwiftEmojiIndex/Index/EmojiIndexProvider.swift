@@ -9,20 +9,20 @@ import Observation
 /// ## Usage
 ///
 /// ```swift
-/// // Use the shared instance with Gemoji data source
-/// let index = EmojiIndexProvider.shared
+/// // Use the shared instance (localized, platform-optimal)
+/// let emojis = try await EmojiIndexProvider.shared.allEmojis
+/// let results = await EmojiIndexProvider.shared.search("smile")
 ///
-/// // Load and search
-/// try await index.load()
-/// let results = await index.search("smile")
+/// // Custom locale
+/// let provider = EmojiIndexProvider.recommended(locale: Locale(identifier: "ja"))
 ///
-/// // Or create with a custom data source
+/// // Custom data source
 /// let customIndex = EmojiIndexProvider(source: MyCustomDataSource())
 /// ```
 @Observable
-public final class EmojiIndexProvider: EmojiIndex, @unchecked Sendable {
-    /// Shared instance using the Gemoji data source.
-    public static let shared = EmojiIndexProvider(source: GemojiDataSource.shared)
+public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
+    /// Shared instance using the recommended data source for the current platform and locale.
+    public static let shared = EmojiIndexProvider.recommended()
 
     // MARK: - Configuration
 
@@ -72,7 +72,33 @@ public final class EmojiIndexProvider: EmojiIndex, @unchecked Sendable {
         self.customFallbackURL = fallbackURL
     }
 
-    // MARK: - EmojiIndex
+    // MARK: - Factory Methods
+
+    /// Creates an index with the recommended data source for the current platform and locale.
+    ///
+    /// This automatically selects the best data source:
+    /// - **macOS**: Apple CoreEmoji (localized) + Gemoji (shortcodes)
+    /// - **iOS/visionOS**: Unicode CLDR (localized) + Gemoji (shortcodes)
+    ///
+    /// - Parameter locale: The locale for emoji names (default: system locale)
+    /// - Returns: A configured `EmojiIndexProvider`
+    public static func recommended(locale: Locale = .current) -> EmojiIndexProvider {
+        #if os(macOS)
+        if AppleEmojiDataSource.isAvailable {
+            return EmojiIndexProvider(source: BlendedEmojiDataSource(
+                primary: AppleEmojiDataSource(locale: locale),
+                secondary: GemojiDataSource.shared
+            ))
+        }
+        #endif
+
+        return EmojiIndexProvider(source: BlendedEmojiDataSource(
+            primary: CLDREmojiDataSource(locale: locale),
+            secondary: GemojiDataSource.shared
+        ))
+    }
+
+    // MARK: - EmojiIndexProtocol
 
     public var allEmojis: [Emoji] {
         get async throws {
@@ -112,24 +138,21 @@ public final class EmojiIndexProvider: EmojiIndex, @unchecked Sendable {
     ///
     /// - Parameters:
     ///   - query: The search query
-    ///   - rankByUsage: If true, results are sorted by usage score (requires EmojiUsageTracker)
-    /// - Returns: Matching emoji, with exact shortcode matches first
+    ///   - ranking: How to rank results (default: `.relevance`)
+    /// - Returns: Matching emoji
     ///
-    /// Search priority:
+    /// For `.relevance` ranking:
     /// 1. Exact shortcode match (pinned to top)
     /// 2. Name contains query
     /// 3. Shortcode prefix match
     /// 4. Keyword prefix match
-    public func search(_ query: String, rankByUsage: Bool = false) async -> [Emoji] {
+    public func search(_ query: String, ranking: SearchRanking = .relevance) async -> [Emoji] {
         try? await ensureLoaded()
 
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else {
             let all = lock.withLock { emojis }
-            if rankByUsage {
-                return rankByUsageScore(all)
-            }
-            return all
+            return applyRanking(all, ranking: ranking)
         }
 
         return lock.withLock {
@@ -170,12 +193,10 @@ public final class EmojiIndexProvider: EmojiIndex, @unchecked Sendable {
                 }
             }
 
-            // Rank by usage if enabled
-            if rankByUsage {
-                results = rankByUsageScore(results)
-            }
+            // Apply ranking
+            results = applyRanking(results, ranking: ranking)
 
-            // Insert exact match at front
+            // Insert exact match at front (always, regardless of ranking)
             if let exact = exactMatch {
                 results.insert(exact, at: 0)
             }
@@ -184,10 +205,17 @@ public final class EmojiIndexProvider: EmojiIndex, @unchecked Sendable {
         }
     }
 
-    /// Rank emoji by usage score (highest first).
-    private func rankByUsageScore(_ emojis: [Emoji]) -> [Emoji] {
-        let tracker = EmojiUsageTracker.shared
-        return emojis.sorted { tracker.score(for: $0.character) > tracker.score(for: $1.character) }
+    /// Apply ranking to emoji list.
+    private func applyRanking(_ emojis: [Emoji], ranking: SearchRanking) -> [Emoji] {
+        switch ranking {
+        case .relevance:
+            return emojis // Already in relevance order
+        case .usage:
+            let tracker = EmojiUsageTracker.shared
+            return emojis.sorted { tracker.score(for: $0.character) > tracker.score(for: $1.character) }
+        case .alphabetical:
+            return emojis.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
     }
 
     /// Get favorite emoji based on usage history.
