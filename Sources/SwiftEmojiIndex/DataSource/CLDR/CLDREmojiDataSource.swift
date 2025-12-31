@@ -29,8 +29,15 @@ public struct CLDREmojiDataSource: EmojiDataSource {
     public let locale: Locale
 
     /// Base URL for CLDR emoji annotations JSON.
-    /// Uses the official Unicode CLDR JSON GitHub repository.
     private static let baseURL = "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations"
+
+    /// GitHub API URL to list available annotation directories.
+    private static let apiURL = "https://api.github.com/repos/unicode-org/cldr-json/contents/cldr-json/cldr-annotations-full/annotations"
+
+    /// Cached available locales.
+    private static var cachedLocales: [Locale]?
+    private static var localesCacheDate: Date?
+    private static let localesCacheMaxAge: TimeInterval = 7 * 24 * 60 * 60 // 7 days
 
     /// Creates a CLDR data source for the specified locale.
     ///
@@ -41,21 +48,61 @@ public struct CLDREmojiDataSource: EmojiDataSource {
         self.displayName = "Unicode CLDR (\(locale.identifier))"
     }
 
-    /// Commonly available CLDR locales for emoji annotations.
-    /// This is not exhaustive - CLDR supports 100+ locales.
-    public static let availableLocales: [Locale] = [
-        "af", "am", "ar", "as", "ast", "az", "be", "bg", "bn", "br",
-        "bs", "ca", "ccp", "chr", "cs", "cy", "da", "de", "el", "en",
-        "en-AU", "en-GB", "es", "es-419", "et", "eu", "fa", "fi", "fil",
-        "fo", "fr", "fr-CA", "ga", "gd", "gl", "gu", "he", "hi", "hr",
-        "hu", "hy", "ia", "id", "is", "it", "ja", "jv", "ka", "kk",
-        "km", "kn", "ko", "kok", "ky", "lo", "lt", "lv", "mk", "ml",
-        "mn", "mr", "ms", "my", "nb", "ne", "nl", "nn", "or", "pa",
-        "pcm", "pl", "ps", "pt", "pt-PT", "ro", "ru", "sd", "si", "sk",
-        "sl", "so", "sq", "sr", "sr-Latn", "sv", "sw", "ta", "te", "th",
-        "tk", "to", "tr", "uk", "ur", "uz", "vi", "yue", "zh", "zh-Hant",
-        "zu"
+    /// Fetches available CLDR locales from the repository.
+    ///
+    /// Results are cached for 7 days. Falls back to common locales on error.
+    public static func fetchAvailableLocales() async -> [Locale] {
+        // Check cache
+        if let cached = cachedLocales,
+           let cacheDate = localesCacheDate,
+           Date().timeIntervalSince(cacheDate) < localesCacheMaxAge {
+            return cached
+        }
+
+        do {
+            let locales = try await fetchLocalesFromAPI()
+            cachedLocales = locales
+            localesCacheDate = Date()
+            return locales
+        } catch {
+            // Fall back to common locales
+            return fallbackLocales
+        }
+    }
+
+    /// Synchronous access to cached locales (may be empty if not fetched yet).
+    public static var availableLocales: [Locale] {
+        cachedLocales ?? fallbackLocales
+    }
+
+    /// Common locales as fallback when API fetch fails.
+    private static let fallbackLocales: [Locale] = [
+        "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh", "zh-Hant",
+        "ar", "ru", "hi", "th", "vi", "id", "ms", "tr", "pl", "nl"
     ].map { Locale(identifier: $0) }
+
+    private static func fetchLocalesFromAPI() async throws -> [Locale] {
+        guard let url = URL(string: apiURL) else {
+            throw EmojiIndexError.invalidURL(apiURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw EmojiIndexError.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        let items = try JSONDecoder().decode([GitHubContentItem].self, from: data)
+
+        return items
+            .filter { $0.type == "dir" }
+            .map { Locale(identifier: $0.name) }
+            .sorted { $0.identifier < $1.identifier }
+    }
 
     public func fetch() async throws -> [EmojiRawEntry] {
         let localeId = bestAvailableLocale()
@@ -84,16 +131,17 @@ public struct CLDREmojiDataSource: EmojiDataSource {
 
     /// Find the best available locale, falling back as needed.
     private func bestAvailableLocale() -> String {
+        let available = Self.availableLocales
         let identifier = locale.identifier.replacingOccurrences(of: "_", with: "-")
 
         // Try exact match
-        if Self.availableLocales.contains(where: { $0.identifier == identifier }) {
+        if available.contains(where: { $0.identifier == identifier }) {
             return identifier
         }
 
         // Try language only (e.g., "en-US" -> "en")
         if let language = locale.language.languageCode?.identifier {
-            if Self.availableLocales.contains(where: { $0.identifier == language }) {
+            if available.contains(where: { $0.identifier == language }) {
                 return language
             }
         }
@@ -142,7 +190,7 @@ public struct CLDREmojiDataSource: EmojiDataSource {
     }
 }
 
-// MARK: - CLDR JSON Models
+// MARK: - JSON Models
 
 private struct CLDRAnnotationsRoot: Decodable {
     let annotations: CLDRAnnotationsContainer
@@ -155,4 +203,9 @@ private struct CLDRAnnotationsRoot: Decodable {
 private struct CLDRAnnotation: Decodable {
     let `default`: [String]?
     let tts: [String]?
+}
+
+private struct GitHubContentItem: Decodable {
+    let name: String
+    let type: String // "dir" or "file"
 }
