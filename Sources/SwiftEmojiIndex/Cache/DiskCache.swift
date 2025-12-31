@@ -148,4 +148,92 @@ public actor DiskCache: EmojiCache {
             throw EmojiIndexError.cacheWriteFailed(underlying: error)
         }
     }
+
+    // MARK: - Cache Management
+
+    /// Information about a cached entry.
+    public struct CacheEntry: Sendable {
+        public let sourceIdentifier: String
+        public let fileSize: Int64
+        public let lastUpdated: Date
+        public let emojiCount: Int
+    }
+
+    /// Lists all cached entries with their metadata.
+    public func listEntries() async -> [CacheEntry] {
+        let fileManager = FileManager.default
+
+        guard fileManager.fileExists(atPath: cacheDirectory.path),
+              let files = try? fileManager.contentsOfDirectory(atPath: cacheDirectory.path) else {
+            return []
+        }
+
+        var entries: [CacheEntry] = []
+
+        for file in files where file.hasSuffix(".json") {
+            let sourceId = String(file.dropLast(5)) // Remove .json
+            let fileURL = cacheFileURL(for: sourceId)
+
+            guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
+                  let size = attrs[.size] as? Int64,
+                  let modDate = attrs[.modificationDate] as? Date else {
+                continue
+            }
+
+            // Try to get emoji count from memory cache or decode
+            let count: Int
+            if let cached = memoryCache[sourceId] {
+                count = cached.entries.count
+            } else if let data = try? Data(contentsOf: fileURL),
+                      let decoded = try? JSONDecoder().decode([EmojiRawEntry].self, from: data) {
+                count = decoded.count
+            } else {
+                count = 0
+            }
+
+            entries.append(CacheEntry(
+                sourceIdentifier: sourceId,
+                fileSize: size,
+                lastUpdated: modDate,
+                emojiCount: count
+            ))
+        }
+
+        return entries
+    }
+
+    /// Total size of all cached data in bytes.
+    public func totalSize() async -> Int64 {
+        let entries = await listEntries()
+        return entries.reduce(0) { $0 + $1.fileSize }
+    }
+
+    /// Checks if a cache entry is older than the specified interval.
+    public func isExpired(for sourceIdentifier: String, maxAge: TimeInterval) async -> Bool {
+        let fileURL = cacheFileURL(for: sourceIdentifier)
+
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let modDate = attrs[.modificationDate] as? Date else {
+            return true // No cache = expired
+        }
+
+        return Date().timeIntervalSince(modDate) > maxAge
+    }
+
+    /// Clears entries older than the specified interval.
+    public func clearExpired(maxAge: TimeInterval) async throws {
+        let entries = await listEntries()
+        let now = Date()
+
+        for entry in entries {
+            if now.timeIntervalSince(entry.lastUpdated) > maxAge {
+                try await clear(for: entry.sourceIdentifier)
+            }
+        }
+    }
+
+    /// The cache directory URL.
+    public var directoryURL: URL {
+        cacheDirectory
+    }
 }

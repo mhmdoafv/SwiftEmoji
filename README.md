@@ -274,6 +274,41 @@ struct MySource: EmojiDataSource {
 let provider = EmojiIndexProvider(source: MySource())
 ```
 
+### Apple CoreEmoji (macOS only)
+
+On macOS, you can use Apple's private CoreEmoji framework for localized emoji names:
+
+```swift
+#if os(macOS)
+import SwiftEmoji
+
+// Check availability
+if AppleEmojiDataSource.isAvailable {
+    // Use Apple source with current locale
+    let source = AppleEmojiDataSource(locale: .current)
+    let provider = EmojiIndexProvider(source: source)
+}
+
+// List available locales
+let locales = AppleEmojiDataSource.availableLocales()
+// [en, ja, fr, de, es, ...]
+#endif
+```
+
+### Blending Sources
+
+Combine Apple's localized names with Gemoji's shortcodes:
+
+```swift
+#if os(macOS)
+let blended = BlendedEmojiDataSource(
+    primary: AppleEmojiDataSource(locale: .current),  // Localized names
+    secondary: GemojiDataSource.shared                 // Shortcodes + keywords
+)
+let provider = EmojiIndexProvider(source: blended)
+#endif
+```
+
 ### EmojiDataSource Protocol
 
 ```swift
@@ -345,6 +380,34 @@ try await EmojiIndexProvider.shared.refresh()
 try await EmojiIndexProvider.shared.clearCacheAndReload()
 ```
 
+### Cache Management
+
+```swift
+let cache = DiskCache.shared
+
+// List all cached entries
+let entries = await cache.listEntries()
+for entry in entries {
+    print("\(entry.sourceIdentifier): \(entry.emojiCount) emoji, \(entry.fileSize) bytes")
+    print("  Last updated: \(entry.lastUpdated)")
+}
+
+// Total cache size
+let totalBytes = await cache.totalSize()
+
+// Check if specific cache is expired
+let isOld = await cache.isExpired(for: "gemoji", maxAge: 7 * 24 * 60 * 60) // 7 days
+
+// Clear expired entries
+try await cache.clearExpired(maxAge: 7 * 24 * 60 * 60)
+
+// Clear specific source
+try await cache.clear(for: "gemoji")
+
+// Clear everything
+try await cache.clearAll()
+```
+
 ### Custom Cache
 
 ```swift
@@ -359,6 +422,48 @@ let provider = EmojiIndexProvider(
     source: GemojiDataSource.shared,
     cache: MyCache()
 )
+```
+
+## Localization (macOS)
+
+Manage emoji locale preferences:
+
+```swift
+#if os(macOS)
+let localeManager = EmojiLocaleManager.shared
+
+// Available locales from CoreEmoji
+let available = localeManager.availableLocales
+// [en, ja, fr, de, ...]
+
+// Set preferred locale
+localeManager.preferredLocale = Locale(identifier: "ja")
+
+// Get effective locale (preferred or system)
+let current = localeManager.effectiveLocale
+
+// Check if localization is available
+if localeManager.isLocalizationAvailable {
+    // Create localized provider
+    let source = AppleEmojiDataSource(locale: current)
+    // ...
+}
+#endif
+```
+
+### Persisting Locale Preference
+
+`EmojiLocaleManager` automatically persists to UserDefaults. For custom storage:
+
+```swift
+// Save
+UserDefaults.standard.set(locale.identifier, forKey: "myApp.emojiLocale")
+
+// Load
+if let id = UserDefaults.standard.string(forKey: "myApp.emojiLocale") {
+    let locale = Locale(identifier: id)
+    let source = AppleEmojiDataSource(locale: locale)
+}
 ```
 
 ## Models

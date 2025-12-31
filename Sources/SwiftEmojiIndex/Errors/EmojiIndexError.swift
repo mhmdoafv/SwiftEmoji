@@ -26,6 +26,9 @@ public enum EmojiIndexError: Error, LocalizedError, Sendable {
     /// An invalid URL was provided.
     case invalidURL(String)
 
+    /// The data source is not available on this platform.
+    case sourceUnavailable(reason: String)
+
     public var errorDescription: String? {
         switch self {
         case .networkUnavailable(let error):
@@ -44,6 +47,8 @@ public enum EmojiIndexError: Error, LocalizedError, Sendable {
             return "Data source returned empty data"
         case .invalidURL(let url):
             return "Invalid URL: \(url)"
+        case .sourceUnavailable(let reason):
+            return "Data source unavailable: \(reason)"
         }
     }
 
@@ -63,6 +68,8 @@ public enum EmojiIndexError: Error, LocalizedError, Sendable {
             return "The data source may be temporarily unavailable. Try again later."
         case .invalidURL:
             return "Check the data source URL configuration."
+        case .sourceUnavailable:
+            return "This data source is not available on this platform."
         }
     }
 }
