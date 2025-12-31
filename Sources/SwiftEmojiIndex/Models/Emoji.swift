@@ -46,6 +46,42 @@ public struct Emoji: Identifiable, Hashable, Sendable, Codable {
         self.keywords = keywords
         self.supportsSkinTone = supportsSkinTone
     }
+
+    /// Creates an Emoji directly from a character.
+    ///
+    /// Use this when you just need an Emoji object and don't need full metadata.
+    /// For enriched metadata (name, keywords, etc.), use `Emoji.lookup(_:)` instead.
+    ///
+    /// ```swift
+    /// let emoji = Emoji("🎨")
+    /// print(emoji.character) // "🎨"
+    /// ```
+    ///
+    /// - Parameter character: The emoji character
+    public init(_ character: String) {
+        self.character = character
+        self.name = character  // Use character as name fallback
+        self.category = .symbols
+        self.shortcodes = []
+        self.keywords = []
+        self.supportsSkinTone = false
+    }
+
+    /// Looks up an emoji character and returns enriched metadata from the index.
+    ///
+    /// Returns `nil` if the character is not found in the emoji index.
+    ///
+    /// ```swift
+    /// if let emoji = await Emoji.lookup("🎨") {
+    ///     print(emoji.name) // "artist palette"
+    /// }
+    /// ```
+    ///
+    /// - Parameter character: The emoji character to look up
+    /// - Returns: The emoji with full metadata, or nil if not found
+    public static func lookup(_ character: String) async -> Emoji? {
+        await EmojiIndexProvider.shared.emoji(for: character)
+    }
 }
 
 // MARK: - Skin Tone Support

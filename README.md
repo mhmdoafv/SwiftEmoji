@@ -149,11 +149,13 @@ let alphabetical = await EmojiIndexProvider.shared.search("smile", ranking: .alp
 
 ## Favorites & Usage Tracking
 
-Track emoji usage to show favorites and rank search results:
+The grid doesn't track usage automatically - you control what gets tracked:
 
 ```swift
-// Record when user selects an emoji
-EmojiUsageTracker.shared.recordUse(emoji.character)
+EmojiGrid(emojis: emojis) { emoji in
+    EmojiUsageTracker.shared.recordUse(emoji.character)  // Track it
+    onSelect(emoji)
+}
 
 // Get favorites (sorted by frequency + recency)
 let favorites = await EmojiIndexProvider.shared.favorites()
@@ -170,20 +172,29 @@ Uses exponential moving average scoring:
 - Minimum 10 favorites kept, maximum 24 returned
 - New users get seeded defaults
 
-### Customization
+### Configuration
 
 ```swift
 let tracker = EmojiUsageTracker.shared
+
+// Disable tracking entirely
+tracker.isEnabled = false
+
+// Customize behavior
 tracker.minFavorites = 10        // Minimum to keep
 tracker.maxFavorites = 24        // Maximum to return
 tracker.decayFactor = 0.9        // Lower = faster decay
 tracker.defaultEmoji = ["👍", "❤️", "😂"]  // Seeds for new users
+tracker.defaultEmoji = []        // No default seeds
 
 // Clear history
 tracker.clearAll()
 
 // Remove specific emoji from favorites
 tracker.clearScore(for: "💩")
+
+// Use separate tracker for different contexts
+let workTracker = EmojiUsageTracker(storageKey: "Work.emojiUsage")
 ```
 
 ## Styling
@@ -549,6 +560,14 @@ public struct Emoji {
     let shortcodes: [String]     // ["grinning"]
     let keywords: [String]       // ["face", "grin", "happy"]
     let supportsSkinTone: Bool
+}
+
+// Direct init (no metadata)
+let emoji = Emoji("🎨")
+
+// Lookup with full metadata
+if let emoji = await Emoji.lookup("🎨") {
+    print(emoji.name) // "artist palette"
 }
 ```
 

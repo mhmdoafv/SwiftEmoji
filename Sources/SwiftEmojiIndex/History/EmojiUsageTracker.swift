@@ -25,6 +25,10 @@ public final class EmojiUsageTracker: @unchecked Sendable {
 
     // MARK: - Configuration
 
+    /// Whether tracking is enabled. Set to `false` to disable all tracking.
+    /// When disabled, `recordUse` becomes a no-op and `favorites` returns empty.
+    public var isEnabled: Bool = true
+
     /// Minimum number of favorites to keep even with low scores.
     public var minFavorites: Int = 10
 
@@ -39,6 +43,7 @@ public final class EmojiUsageTracker: @unchecked Sendable {
     public var pruneThreshold: Double = 0.01
 
     /// Default emoji for new users (seeded with tiny scores).
+    /// Set to empty array to disable default seeding.
     public var defaultEmoji: [String] = ["👍", "❤️", "😂", "🔥", "✨", "🙏", "💀", "👀", "🎉", "💯"]
 
     // MARK: - State
@@ -68,7 +73,9 @@ public final class EmojiUsageTracker: @unchecked Sendable {
     /// Record an emoji being used.
     ///
     /// This decays all scores and boosts the used emoji.
+    /// Does nothing if `isEnabled` is `false`.
     public func recordUse(_ emoji: String) {
+        guard isEnabled else { return }
         lock.withLock {
             applyDecay()
             scores[emoji, default: 0] += 1
@@ -89,8 +96,10 @@ public final class EmojiUsageTracker: @unchecked Sendable {
     }
 
     /// Get favorite emoji characters sorted by score (highest first).
+    /// Returns empty array if `isEnabled` is `false`.
     public var favorites: [String] {
-        lock.withLock {
+        guard isEnabled else { return [] }
+        return lock.withLock {
             scores
                 .filter { $0.value > pruneThreshold }
                 .sorted { $0.value > $1.value }
