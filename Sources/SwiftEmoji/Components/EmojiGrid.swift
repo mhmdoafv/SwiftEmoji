@@ -101,13 +101,13 @@ public struct EmojiGrid: View {
     // MARK: - Body
 
     public var body: some View {
-        AnyView(style.makeGrid(configuration: GridConfiguration(
+        style.makeGrid(configuration: GridConfiguration(
             emojis: emojis,
             selection: currentSelection,
             isSelectable: selectionMode != .none,
             isSelected: isEmojiSelected,
             onTap: handleTap
-        )))
+        ))
     }
 
     // MARK: - Private
@@ -155,12 +155,40 @@ public struct EmojiGrid: View {
 
 // MARK: - Environment
 
+/// Type-erased wrapper for EmojiGridStyle.
+struct AnyEmojiGridStyle: @unchecked Sendable {
+    private let _makeGrid: @MainActor (GridConfiguration) -> AnyView
+    private let _makeCell: @MainActor (CellConfiguration) -> AnyView
+    private let _makeSectionHeader: @MainActor (HeaderConfiguration) -> AnyView
+
+    init<S: EmojiGridStyle>(_ style: S) {
+        _makeGrid = { @MainActor in AnyView(style.makeGrid(configuration: $0)) }
+        _makeCell = { @MainActor in AnyView(style.makeCell(configuration: $0)) }
+        _makeSectionHeader = { @MainActor in AnyView(style.makeSectionHeader(configuration: $0)) }
+    }
+
+    @MainActor
+    func makeGrid(configuration: GridConfiguration) -> AnyView {
+        _makeGrid(configuration)
+    }
+
+    @MainActor
+    func makeCell(configuration: CellConfiguration) -> AnyView {
+        _makeCell(configuration)
+    }
+
+    @MainActor
+    func makeSectionHeader(configuration: HeaderConfiguration) -> AnyView {
+        _makeSectionHeader(configuration)
+    }
+}
+
 private struct EmojiGridStyleKey: EnvironmentKey {
-    static let defaultValue: any EmojiGridStyle = DefaultEmojiGridStyle()
+    static let defaultValue = AnyEmojiGridStyle(DefaultEmojiGridStyle())
 }
 
 extension EnvironmentValues {
-    var emojiGridStyle: any EmojiGridStyle {
+    var emojiGridStyle: AnyEmojiGridStyle {
         get { self[EmojiGridStyleKey.self] }
         set { self[EmojiGridStyleKey.self] = newValue }
     }
@@ -169,7 +197,7 @@ extension EnvironmentValues {
 extension View {
     /// Sets the style for emoji grids within this view.
     public func emojiGridStyle<S: EmojiGridStyle>(_ style: S) -> some View {
-        environment(\.emojiGridStyle, style)
+        environment(\.emojiGridStyle, AnyEmojiGridStyle(style))
     }
 }
 

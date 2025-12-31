@@ -45,20 +45,20 @@ import SwiftEmojiIndex
 /// EmojiGrid(emojis: emojis, selection: $selection)
 ///     .emojiGridStyle(MyStyle())
 /// ```
-public protocol EmojiGridStyle {
+public protocol EmojiGridStyle: Sendable {
     associatedtype GridBody: View
     associatedtype CellBody: View
     associatedtype HeaderBody: View
 
     /// Creates the grid layout with all cells.
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func makeGrid(configuration: GridConfiguration) -> GridBody
 
     /// Creates an individual cell view.
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func makeCell(configuration: CellConfiguration) -> CellBody
 
     /// Creates a section header view.
-    @ViewBuilder
+    @MainActor @ViewBuilder
     func makeSectionHeader(configuration: HeaderConfiguration) -> HeaderBody
 }

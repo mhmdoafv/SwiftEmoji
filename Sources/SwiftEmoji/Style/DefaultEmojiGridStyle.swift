@@ -27,9 +27,9 @@ extension EmojiGridStyle where Self == CompactEmojiGridStyle {
 
 /// The default emoji grid style.
 public struct DefaultEmojiGridStyle: EmojiGridStyle {
-    public var cellSize: CGFloat
-    public var spacing: CGFloat
-    public var columns: [GridItem]?
+    public let cellSize: CGFloat
+    public let spacing: CGFloat
+    public let columns: [GridItem]?
 
     public init(
         cellSize: CGFloat = 44,

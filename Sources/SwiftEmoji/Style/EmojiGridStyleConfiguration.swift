@@ -19,6 +19,7 @@ public struct GridConfiguration {
     public let onTap: (Emoji) -> Void
 
     /// Creates a new grid configuration.
+    @MainActor
     public init(
         emojis: [Emoji],
         selection: Set<String>,
@@ -49,6 +50,7 @@ public struct CellConfiguration {
     public let onTap: () -> Void
 
     /// Creates a new cell configuration.
+    @MainActor
     public init(
         emoji: Emoji,
         isSelected: Bool,
