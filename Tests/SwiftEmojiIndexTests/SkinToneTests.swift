@@ -76,10 +76,6 @@ struct SkinToneTests {
             #expect(SkinTone.dark.example == "✋\u{1F3FF}")
         }
 
-        @Test("All examples contain raised hand base", arguments: SkinTone.allCases)
-        func containsBaseEmoji(skinTone: SkinTone) {
-            #expect(skinTone.example.hasPrefix("✋"))
-        }
     }
 
     @Test("Identifiable id returns rawValue")

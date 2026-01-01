@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import SwiftEmojiIndex
 
-@Suite("EmojiLocaleManager")
+@Suite("EmojiLocaleManager", .serialized)
 struct EmojiLocaleManagerTests {
 
     @Test("shared singleton exists")

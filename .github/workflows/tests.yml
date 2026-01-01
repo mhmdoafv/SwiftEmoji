@@ -110,6 +110,45 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
 
+  test-watchos:
+    name: Tests (watchOS)
+    runs-on: macos-26
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Show Xcode version
+      run: xcodebuild -version
+
+    - name: Find latest watchOS Simulator
+      id: find_simulator
+      run: |
+        RUNTIME_ID=$(xcrun simctl list runtimes watchos --json | jq -r '.runtimes | sort_by(.version) | last | .identifier')
+        if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" == "null" ]; then
+          echo "::error::No watchOS runtime found."
+          exit 1
+        fi
+        DEVICE_ID=$(xcrun simctl list devices --json | jq -r --arg RT_ID "$RUNTIME_ID" '.devices[$RT_ID] | map(select(.isAvailable)) | .[0].udid')
+        if [ -z "$DEVICE_ID" ] || [ "$DEVICE_ID" == "null" ]; then
+          echo "::error::No available watchOS simulator device found for runtime $RUNTIME_ID."
+          exit 1
+        fi
+        echo "Found watchOS Simulator Runtime: $RUNTIME_ID"
+        echo "Found watchOS Simulator Device UDID: $DEVICE_ID"
+        echo "SIMULATOR_DESTINATION=platform=watchOS Simulator,id=$DEVICE_ID" >> $GITHUB_OUTPUT
+
+    - name: Run tests on watchOS
+      timeout-minutes: 10
+      run: |
+        set -o pipefail
+        xcodebuild test \
+          -scheme SwiftEmoji-Package \
+          -destination "${{ steps.find_simulator.outputs.SIMULATOR_DESTINATION }}" \
+          -skipMacroValidation \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO
+
   test-visionos:
     name: Tests (visionOS)
     runs-on: macos-26
