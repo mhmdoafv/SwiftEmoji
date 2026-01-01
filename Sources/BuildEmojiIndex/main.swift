@@ -346,7 +346,7 @@ func buildFromApple(_ entries: [EmojiRawEntry], gemojiEntries: [GemojiEntry]?) -
             name: entry.name,
             category: gemoji?.category ?? entry.category,  // Get category from Gemoji
             shortcodes: gemoji?.aliases ?? entry.shortcodes,
-            keywords: Array(Set(entry.keywords + (gemoji?.tags ?? []))),
+            keywords: Array(Set(entry.keywords + (gemoji?.tags ?? []))).sorted(),
             supportsSkinTone: gemoji?.skinTones ?? entry.supportsSkinTone
         )
     }
@@ -385,7 +385,7 @@ func buildFromCLDR(_ annotations: [String: CLDRAnnotation], gemojiEntries: [Gemo
             name: name,
             category: gemoji?.category ?? "Unknown",
             shortcodes: gemoji?.aliases ?? [],
-            keywords: Array(Set(keywords + (gemoji?.tags ?? []))),
+            keywords: Array(Set(keywords + (gemoji?.tags ?? []))).sorted(),
             supportsSkinTone: gemoji?.skinTones ?? false
         ))
     }
