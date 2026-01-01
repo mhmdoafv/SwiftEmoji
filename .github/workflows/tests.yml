@@ -6,6 +6,10 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Build workflow run ID to use artifacts from'
+        required: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
@@ -27,7 +31,7 @@ jobs:
         name: build-artifacts
         path: DerivedData/Build/Products
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        run-id: ${{ github.event.workflow_run.id }}
+        run-id: ${{ github.event.inputs.build_run_id || github.event.workflow_run.id }}
 
     - name: Show Xcode version
       run: xcodebuild -version
