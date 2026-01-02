@@ -3,8 +3,12 @@ import SwiftEmojiIndex
 
 /// Configuration passed to `EmojiGridStyle.makeGrid`.
 public struct GridConfiguration {
-    /// All emojis being displayed.
+    /// All emojis being displayed (flat list).
     public let emojis: [Emoji]
+
+    /// Emoji sections (when displaying by category).
+    /// When non-nil, styles should render section headers.
+    public let sections: [EmojiSection]?
 
     /// Currently selected emoji characters.
     public let selection: Set<String>
@@ -18,7 +22,7 @@ public struct GridConfiguration {
     /// Closure to handle emoji tap.
     public let onTap: (Emoji) -> Void
 
-    /// Creates a new grid configuration.
+    /// Creates a new grid configuration with flat emojis.
     @MainActor
     public init(
         emojis: [Emoji],
@@ -28,6 +32,24 @@ public struct GridConfiguration {
         onTap: @escaping (Emoji) -> Void
     ) {
         self.emojis = emojis
+        self.sections = nil
+        self.selection = selection
+        self.isSelectable = isSelectable
+        self.isSelected = isSelected
+        self.onTap = onTap
+    }
+
+    /// Creates a new grid configuration with sections.
+    @MainActor
+    public init(
+        sections: [EmojiSection],
+        selection: Set<String>,
+        isSelectable: Bool,
+        isSelected: @escaping (Emoji) -> Bool,
+        onTap: @escaping (Emoji) -> Void
+    ) {
+        self.emojis = sections.flatMap(\.emojis)
+        self.sections = sections
         self.selection = selection
         self.isSelectable = isSelectable
         self.isSelected = isSelected

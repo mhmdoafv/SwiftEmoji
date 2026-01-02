@@ -198,6 +198,21 @@ public final class EmojiIndexProvider: EmojiIndexProtocol, @unchecked Sendable {
         }
     }
 
+    /// All emojis grouped into ordered sections by category.
+    ///
+    /// Sections follow `EmojiCategory.allCases` order. Empty categories are omitted.
+    public var sections: [EmojiSection] {
+        get async throws {
+            try await ensureLoaded()
+            return EmojiCategory.allCases.compactMap { category in
+                guard let emojis = currentCategories[category], !emojis.isEmpty else {
+                    return nil
+                }
+                return EmojiSection(category: category, emojis: emojis)
+            }
+        }
+    }
+
     public var isStale: Bool {
         get async {
             guard let lastUpdated = self.lastUpdated else {

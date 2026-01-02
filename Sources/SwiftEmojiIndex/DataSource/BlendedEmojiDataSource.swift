@@ -1,8 +1,8 @@
 import Foundation
 
-/// A data source that blends two sources, using one for base data and another for enrichment.
+/// A data source that blends two sources, using one for names and another for order/metadata.
 ///
-/// Useful for combining Apple's localized names with Gemoji's shortcodes and keywords.
+/// Useful for combining Apple's localized names with Gemoji's standard order and shortcodes.
 ///
 /// ## Usage
 ///
@@ -18,9 +18,9 @@ import Foundation
 ///
 /// ## Blending Behavior
 ///
-/// - Primary source provides: character, name, category (if available)
-/// - Secondary source enriches: shortcodes, keywords, supportsSkinTone
-/// - Emoji only in secondary are added at the end
+/// - Secondary source provides: ORDER, shortcodes, keywords, supportsSkinTone, category
+/// - Primary source provides: localized name
+/// - Emoji only in primary (not yet in secondary) are appended at the end
 public struct BlendedEmojiDataSource: EmojiDataSource {
     public let identifier: String
     public let displayName: String
@@ -57,28 +57,28 @@ public struct BlendedEmojiDataSource: EmojiDataSource {
         }
         #endif
 
-        // Index secondary by character for fast lookup
-        var secondaryByChar: [String: EmojiRawEntry] = [:]
-        for entry in secondaryEntries {
-            secondaryByChar[entry.character] = entry
+        // Index primary by character for fast lookup (provides localized names)
+        var primaryByChar: [String: EmojiRawEntry] = [:]
+        for entry in primaryEntries {
+            primaryByChar[entry.character] = entry
         }
 
-        // Blend: primary data enriched with secondary
+        // Blend: use secondary's ORDER (standard emoji order), enriched with primary's names
         var results: [EmojiRawEntry] = []
         var seen = Set<String>()
 
-        for entry in primaryEntries {
+        for entry in secondaryEntries {
             seen.insert(entry.character)
 
-            if let enrichment = secondaryByChar[entry.character] {
-                // Merge: primary name + secondary shortcodes/keywords
+            if let localized = primaryByChar[entry.character] {
+                // Merge: primary's localized name + secondary's order/shortcodes/keywords
                 let merged = EmojiRawEntry(
                     character: entry.character,
-                    name: entry.name,
-                    category: entry.category != "Unknown" ? entry.category : enrichment.category,
-                    shortcodes: enrichment.shortcodes,
-                    keywords: mergeKeywords(entry.keywords, enrichment.keywords),
-                    supportsSkinTone: enrichment.supportsSkinTone
+                    name: localized.name,
+                    category: entry.category != "Unknown" ? entry.category : localized.category,
+                    shortcodes: entry.shortcodes,
+                    keywords: mergeKeywords(localized.keywords, entry.keywords),
+                    supportsSkinTone: entry.supportsSkinTone
                 )
                 results.append(merged)
             } else {
@@ -86,8 +86,8 @@ public struct BlendedEmojiDataSource: EmojiDataSource {
             }
         }
 
-        // Add any emoji only in secondary
-        for entry in secondaryEntries {
+        // Add any emoji only in primary (new emoji not yet in secondary)
+        for entry in primaryEntries {
             if !seen.contains(entry.character) {
                 results.append(entry)
             }

@@ -8,110 +8,181 @@ import SwiftEmojiIndex
 ///
 /// It does NOT include a ScrollView - you wrap it yourself for full control.
 ///
+/// ## Sectioned vs Flat
+///
+/// Pass `sections` for a categorized picker with headers:
+/// ```swift
+/// let sections = try await EmojiIndexProvider.shared.sections
+/// EmojiGrid(sections: sections) { emoji in
+///     selected = emoji
+/// }
+/// ```
+///
+/// Pass `emojis` for a flat list (search results, favorites):
+/// ```swift
+/// let results = await EmojiIndexProvider.shared.search(query)
+/// EmojiGrid(emojis: results) { emoji in
+///     selected = emoji
+/// }
+/// ```
+///
 /// ## Selection Modes
 ///
 /// ### Tap-only (no selection state)
 /// ```swift
-/// ScrollView {
-///     EmojiGrid(emojis: emojis) { emoji in
-///         canvas.add(emoji)
-///         dismiss()
-///     }
+/// EmojiGrid(sections: sections) { emoji in
+///     canvas.add(emoji)
+///     dismiss()
 /// }
 /// ```
 ///
 /// ### Single selection
 /// ```swift
-/// ScrollView {
-///     EmojiGrid(emojis: emojis, selection: $selected)
-/// }
+/// EmojiGrid(sections: sections, selection: $selected)
 /// ```
 ///
 /// ### Multiple selection
 /// ```swift
-/// ScrollView {
-///     EmojiGrid(emojis: emojis, selection: $selectedSet)
-/// }
+/// EmojiGrid(sections: sections, selection: $selectedSet)
 /// ```
 ///
 /// ## Styling
 ///
 /// ```swift
-/// EmojiGrid(emojis: emojis, selection: $selected)
-///     .emojiGridStyle(LargeEmojiGridStyle())
+/// EmojiGrid(sections: sections, selection: $selected)
+///     .emojiGridStyle(.large)
 /// ```
 public struct EmojiGrid: View {
     private let emojis: [Emoji]
+    private let sections: [EmojiSection]?
     private let onTap: ((Emoji) -> Void)?
     private let selectionMode: SelectionMode
-
+    
     @Binding private var singleSelection: Emoji?
     @Binding private var multipleSelection: Set<String>
-
+    
     @Environment(\.emojiGridStyle) private var style
-
+    
     private enum SelectionMode {
         case none
         case single
         case multiple
     }
-
-    // MARK: - Tap-only
-
+    
+    // MARK: - Flat Emojis (Tap-only)
+    
     /// Creates an emoji grid with tap-only interaction.
     public init(
         emojis: [Emoji],
         onTap: @escaping (Emoji) -> Void
     ) {
         self.emojis = emojis
+        self.sections = nil
         self.onTap = onTap
         self.selectionMode = .none
         self._singleSelection = .constant(nil)
         self._multipleSelection = .constant([])
     }
-
-    // MARK: - Single Selection
-
+    
+    // MARK: - Flat Emojis (Single Selection)
+    
     /// Creates an emoji grid with single selection.
     public init(
         emojis: [Emoji],
         selection: Binding<Emoji?>
     ) {
         self.emojis = emojis
+        self.sections = nil
         self.onTap = nil
         self.selectionMode = .single
         self._singleSelection = selection
         self._multipleSelection = .constant([])
     }
-
-    // MARK: - Multiple Selection
-
+    
+    // MARK: - Flat Emojis (Multiple Selection)
+    
     /// Creates an emoji grid with multiple selection.
     public init(
         emojis: [Emoji],
         selection: Binding<Set<String>>
     ) {
         self.emojis = emojis
+        self.sections = nil
         self.onTap = nil
         self.selectionMode = .multiple
         self._singleSelection = .constant(nil)
         self._multipleSelection = selection
     }
-
-    // MARK: - Body
-
-    public var body: some View {
-        style.makeGrid(configuration: GridConfiguration(
-            emojis: emojis,
-            selection: currentSelection,
-            isSelectable: selectionMode != .none,
-            isSelected: isEmojiSelected,
-            onTap: handleTap
-        ))
+    
+    // MARK: - Sectioned (Tap-only)
+    
+    /// Creates a sectioned emoji grid with tap-only interaction.
+    public init(
+        sections: [EmojiSection],
+        onTap: @escaping (Emoji) -> Void
+    ) {
+        self.emojis = sections.flatMap(\.emojis)
+        self.sections = sections
+        self.onTap = onTap
+        self.selectionMode = .none
+        self._singleSelection = .constant(nil)
+        self._multipleSelection = .constant([])
     }
-
+    
+    // MARK: - Sectioned (Single Selection)
+    
+    /// Creates a sectioned emoji grid with single selection.
+    public init(
+        sections: [EmojiSection],
+        selection: Binding<Emoji?>
+    ) {
+        self.emojis = sections.flatMap(\.emojis)
+        self.sections = sections
+        self.onTap = nil
+        self.selectionMode = .single
+        self._singleSelection = selection
+        self._multipleSelection = .constant([])
+    }
+    
+    // MARK: - Sectioned (Multiple Selection)
+    
+    /// Creates a sectioned emoji grid with multiple selection.
+    public init(
+        sections: [EmojiSection],
+        selection: Binding<Set<String>>
+    ) {
+        self.emojis = sections.flatMap(\.emojis)
+        self.sections = sections
+        self.onTap = nil
+        self.selectionMode = .multiple
+        self._singleSelection = .constant(nil)
+        self._multipleSelection = selection
+    }
+    
+    // MARK: - Body
+    
+    public var body: some View {
+        if let sections {
+            style.makeGrid(configuration: GridConfiguration(
+                sections: sections,
+                selection: currentSelection,
+                isSelectable: selectionMode != .none,
+                isSelected: isEmojiSelected,
+                onTap: handleTap
+            ))
+        } else {
+            style.makeGrid(configuration: GridConfiguration(
+                emojis: emojis,
+                selection: currentSelection,
+                isSelectable: selectionMode != .none,
+                isSelected: isEmojiSelected,
+                onTap: handleTap
+            ))
+        }
+    }
+    
     // MARK: - Private
-
+    
     private var currentSelection: Set<String> {
         switch selectionMode {
         case .none:
@@ -125,7 +196,7 @@ public struct EmojiGrid: View {
             return multipleSelection
         }
     }
-
+    
     private func isEmojiSelected(_ emoji: Emoji) -> Bool {
         switch selectionMode {
         case .none:
@@ -136,7 +207,7 @@ public struct EmojiGrid: View {
             return multipleSelection.contains(emoji.id)
         }
     }
-
+    
     private func handleTap(_ emoji: Emoji) {
         switch selectionMode {
         case .none:
@@ -160,23 +231,23 @@ struct AnyEmojiGridStyle: @unchecked Sendable {
     private let _makeGrid: @MainActor (GridConfiguration) -> AnyView
     private let _makeCell: @MainActor (CellConfiguration) -> AnyView
     private let _makeSectionHeader: @MainActor (HeaderConfiguration) -> AnyView
-
+    
     init<S: EmojiGridStyle>(_ style: S) {
         _makeGrid = { @MainActor in AnyView(style.makeGrid(configuration: $0)) }
         _makeCell = { @MainActor in AnyView(style.makeCell(configuration: $0)) }
         _makeSectionHeader = { @MainActor in AnyView(style.makeSectionHeader(configuration: $0)) }
     }
-
+    
     @MainActor
     func makeGrid(configuration: GridConfiguration) -> AnyView {
         _makeGrid(configuration)
     }
-
+    
     @MainActor
     func makeCell(configuration: CellConfiguration) -> AnyView {
         _makeCell(configuration)
     }
-
+    
     @MainActor
     func makeSectionHeader(configuration: HeaderConfiguration) -> AnyView {
         _makeSectionHeader(configuration)
@@ -205,38 +276,44 @@ extension View {
 
 #Preview("Searchable Picker") {
     @Previewable @State var searchText = ""
-    @Previewable @State var emojis: [Emoji] = []
+    @Previewable @State var sections: [EmojiSection] = []
     @Previewable @State var favorites: [Emoji] = []
     @Previewable @State var searchResults: [Emoji] = []
     @Previewable @State var selected: Emoji?
-
+    
     NavigationStack {
         ScrollView {
             // Show favorites when not searching
             if searchText.isEmpty && !favorites.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Frequently Used")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        EmojiGrid(emojis: favorites) { emoji in
-                            EmojiUsageTracker.shared.recordUse(emoji.character)
-                            selected = emoji
-                        }
-                        .emojiGridStyle(.compact)
-                        .padding(.horizontal)
+                    EmojiSectionHeader("Favorites", systemImage: "star")
+                    EmojiGrid(emojis: favorites) { emoji in
+                        EmojiUsageTracker.shared.recordUse(emoji.character)
+                        selected = emoji
                     }
+                    .emojiGridStyle(.default(cellSize: 60, spacing: 12))
+                    
                 }
+                .padding(.horizontal)
                 .padding(.bottom)
             }
-
-            EmojiGrid(emojis: searchText.isEmpty ? emojis : searchResults) { emoji in
-                EmojiUsageTracker.shared.recordUse(emoji.character)
-                selected = emoji
+            
+            // Show sectioned grid when not searching, flat results when searching
+            if searchText.isEmpty {
+                EmojiGrid(sections: sections) { emoji in
+                    EmojiUsageTracker.shared.recordUse(emoji.character)
+                    selected = emoji
+                }
+                .emojiGridStyle(.default(cellSize: 60, spacing: 12))
+                .padding(.horizontal)
+            } else {
+                EmojiGrid(emojis: searchResults) { emoji in
+                    EmojiUsageTracker.shared.recordUse(emoji.character)
+                    selected = emoji
+                }
+                .emojiGridStyle(.default(cellSize: 60, spacing: 12))
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         }
         .navigationTitle("Emoji")
         .searchable(text: $searchText, prompt: "Search emoji")
@@ -250,7 +327,7 @@ extension View {
             }
         }
         .task {
-            emojis = (try? await EmojiIndexProvider.shared.allEmojis) ?? []
+            sections = (try? await EmojiIndexProvider.shared.sections) ?? []
             favorites = await EmojiIndexProvider.shared.favorites()
         }
         .overlay {
@@ -266,16 +343,16 @@ extension View {
 
 #Preview("Single Selection") {
     @Previewable @State var selected: Emoji?
-    @Previewable @State var emojis: [Emoji] = []
-
+    @Previewable @State var sections: [EmojiSection] = []
+    
     NavigationStack {
         ScrollView {
-            EmojiGrid(emojis: emojis, selection: $selected)
+            EmojiGrid(sections: sections, selection: $selected)
                 .padding(.horizontal)
         }
         .navigationTitle("Pick One")
         .task {
-            emojis = (try? await EmojiIndexProvider.shared.allEmojis) ?? []
+            sections = (try? await EmojiIndexProvider.shared.sections) ?? []
         }
         .toolbar {
             if let selected {
@@ -287,17 +364,17 @@ extension View {
 
 #Preview("Multiple Selection") {
     @Previewable @State var selected: Set<String> = []
-    @Previewable @State var emojis: [Emoji] = []
-
+    @Previewable @State var sections: [EmojiSection] = []
+    
     NavigationStack {
         ScrollView {
-            EmojiGrid(emojis: emojis, selection: $selected)
+            EmojiGrid(sections: sections, selection: $selected)
                 .emojiGridStyle(.large)
                 .padding(.horizontal)
         }
         .navigationTitle("Favorites")
         .task {
-            emojis = (try? await EmojiIndexProvider.shared.allEmojis) ?? []
+            sections = (try? await EmojiIndexProvider.shared.sections) ?? []
         }
         .toolbar {
             Text("\(selected.count) selected")
@@ -307,12 +384,12 @@ extension View {
 
 #Preview("Compact Horizontal") {
     @Previewable @State var emojis: [Emoji] = []
-
+    
     VStack(alignment: .leading, spacing: 16) {
         Text("Recent")
             .font(.headline)
             .padding(.horizontal)
-
+        
         ScrollView(.horizontal, showsIndicators: false) {
             EmojiGrid(emojis: Array(emojis.prefix(20))) { emoji in
                 print("Tapped: \(emoji.character)")
@@ -320,7 +397,7 @@ extension View {
             .emojiGridStyle(.compact)
             .padding(.horizontal)
         }
-
+        
         Spacer()
     }
     .padding(.top)
@@ -331,7 +408,7 @@ extension View {
 
 #Preview("Styles") {
     @Previewable @State var selected: Emoji?
-
+    
     let sampleEmojis = [
         Emoji(character: "😀", name: "grinning face", category: .smileysAndEmotion),
         Emoji(character: "😂", name: "face with tears of joy", category: .smileysAndEmotion),
@@ -340,25 +417,25 @@ extension View {
         Emoji(character: "🤔", name: "thinking face", category: .smileysAndEmotion),
         Emoji(character: "😎", name: "smiling face with sunglasses", category: .smileysAndEmotion),
     ]
-
+    
     ScrollView {
         VStack(alignment: .leading, spacing: 24) {
             Text("Default")
                 .font(.headline)
             EmojiGrid(emojis: sampleEmojis, selection: $selected)
-
+            
             Text("Large")
                 .font(.headline)
             EmojiGrid(emojis: sampleEmojis, selection: $selected)
                 .emojiGridStyle(.large)
-
+            
             Text("Compact")
                 .font(.headline)
             ScrollView(.horizontal) {
                 EmojiGrid(emojis: sampleEmojis, selection: $selected)
                     .emojiGridStyle(.compact)
             }
-
+            
             Text("Custom Size")
                 .font(.headline)
             EmojiGrid(emojis: sampleEmojis, selection: $selected)
@@ -371,10 +448,10 @@ extension View {
 #Preview("Localization") {
     @Previewable @State var availableLocales: [Locale] = []
     @Previewable @State var showDiagnostics = true
-
+    
     // Single provider instance - observe it directly
     let provider = EmojiIndexProvider.shared
-
+    
     NavigationStack {
         List {
             // Diagnostics section
@@ -389,7 +466,7 @@ extension View {
                 }
                 .font(.caption)
             }
-
+            
             // Emoji list - directly observe provider.currentEmojis
             Section("Emoji (First 50)") {
                 ForEach(provider.currentEmojis.prefix(50)) { emoji in
@@ -423,7 +500,7 @@ extension View {
                 .background(.ultraThinMaterial)
             }
         }
-        #if os(watchOS)
+#if os(watchOS)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 NavigationLink {
@@ -448,19 +525,19 @@ extension View {
                 }
                 .disabled(provider.isLoading || availableLocales.isEmpty)
             }
-
+            
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     List {
                         Toggle("Diagnostics", isOn: $showDiagnostics)
-
+                        
                         Button("Clear Caches", role: .destructive) {
                             Task {
                                 try? await DiskCache.shared.clearAll()
                                 try? await provider.clearCacheAndReload()
                             }
                         }
-
+                        
                         Button("Refresh") {
                             Task {
                                 try? await provider.refresh()
@@ -473,7 +550,7 @@ extension View {
                 }
             }
         }
-        #else
+#else
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Menu {
@@ -499,20 +576,20 @@ extension View {
                 }
                 .disabled(provider.isLoading || availableLocales.isEmpty)
             }
-
+            
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Toggle("Show Diagnostics", isOn: $showDiagnostics)
-
+                    
                     Divider()
-
+                    
                     Button("Clear All Caches", role: .destructive) {
                         Task {
                             try? await DiskCache.shared.clearAll()
                             try? await provider.clearCacheAndReload()
                         }
                     }
-
+                    
                     Button("Force Refresh") {
                         Task {
                             try? await provider.refresh()
@@ -523,7 +600,7 @@ extension View {
                 }
             }
         }
-        #endif
+#endif
         .task {
             // Fetch available locales
             availableLocales = await EmojiLocaleManager.shared.fetchAvailableLocales()
@@ -536,38 +613,38 @@ extension View {
 #Preview("Usage Tracker") {
     @Previewable @State var emojis: [Emoji] = []
     @Previewable @State var favorites: [Emoji] = []
-
+    
     let tracker = EmojiUsageTracker.shared
-
+    
     NavigationStack {
         List {
             Section("Settings") {
-                #if os(tvOS)
+#if os(tvOS)
                 HStack {
                     Text("Min Favorites: \(tracker.minFavorites)")
                     Spacer()
                     Button("-") { if tracker.minFavorites > 1 { tracker.minFavorites -= 1 } }
                     Button("+") { if tracker.minFavorites < 20 { tracker.minFavorites += 1 } }
                 }
-
+                
                 HStack {
                     Text("Max Favorites: \(tracker.maxFavorites)")
                     Spacer()
                     Button("-") { if tracker.maxFavorites > 10 { tracker.maxFavorites -= 1 } }
                     Button("+") { if tracker.maxFavorites < 50 { tracker.maxFavorites += 1 } }
                 }
-                #else
+#else
                 Stepper("Min Favorites: \(tracker.minFavorites)", value: Binding(
                     get: { tracker.minFavorites },
                     set: { tracker.minFavorites = $0 }
                 ), in: 1...20)
-
+                
                 Stepper("Max Favorites: \(tracker.maxFavorites)", value: Binding(
                     get: { tracker.maxFavorites },
                     set: { tracker.maxFavorites = $0 }
                 ), in: 10...50)
-                #endif
-
+#endif
+                
                 Button("Clear All Usage") {
                     tracker.clearAll()
                     Task {
@@ -576,7 +653,7 @@ extension View {
                 }
                 .foregroundStyle(.red)
             }
-
+            
             Section("Favorites (\(favorites.count))") {
                 if favorites.isEmpty {
                     Text("Tap emoji below to add favorites")
@@ -597,7 +674,7 @@ extension View {
                     }
                 }
             }
-
+            
             Section("Tap to Use") {
                 ScrollView(.horizontal, showsIndicators: false) {
                     EmojiGrid(emojis: Array(emojis.prefix(30))) { emoji in

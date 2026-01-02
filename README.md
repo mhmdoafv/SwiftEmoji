@@ -1,5 +1,5 @@
 <div align="center">
-    <img width="180" height="180" src="/Resources/icon/icon.png" alt="SwiftEmoji Logo">
+    <img width="120" height="120" src="/Resources/icon/icon.png" alt="SwiftEmoji Logo">
     <h1><b>SwiftEmoji</b></h1>
     <p>
         Emoji grid and index for SwiftUI. No hidden behaviors, full customization.

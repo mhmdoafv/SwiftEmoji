@@ -45,13 +45,30 @@ public struct DefaultEmojiGridStyle: EmojiGridStyle, @unchecked Sendable {
         let gridColumns = columns ?? [GridItem(.adaptive(minimum: cellSize))]
 
         LazyVGrid(columns: gridColumns, spacing: spacing) {
-            ForEach(configuration.emojis) { emoji in
-                makeCell(configuration: CellConfiguration(
-                    emoji: emoji,
-                    isSelected: configuration.isSelected(emoji),
-                    isSelectable: configuration.isSelectable,
-                    onTap: { configuration.onTap(emoji) }
-                ))
+            if let sections = configuration.sections {
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.emojis) { emoji in
+                            makeCell(configuration: CellConfiguration(
+                                emoji: emoji,
+                                isSelected: configuration.isSelected(emoji),
+                                isSelectable: configuration.isSelectable,
+                                onTap: { configuration.onTap(emoji) }
+                            ))
+                        }
+                    } header: {
+                        makeSectionHeader(configuration: HeaderConfiguration(category: section.category))
+                    }
+                }
+            } else {
+                ForEach(configuration.emojis) { emoji in
+                    makeCell(configuration: CellConfiguration(
+                        emoji: emoji,
+                        isSelected: configuration.isSelected(emoji),
+                        isSelectable: configuration.isSelectable,
+                        onTap: { configuration.onTap(emoji) }
+                    ))
+                }
             }
         }
     }
@@ -93,13 +110,30 @@ public struct LargeEmojiGridStyle: EmojiGridStyle {
 
     public func makeGrid(configuration: GridConfiguration) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))], spacing: 8) {
-            ForEach(configuration.emojis) { emoji in
-                makeCell(configuration: CellConfiguration(
-                    emoji: emoji,
-                    isSelected: configuration.isSelected(emoji),
-                    isSelectable: configuration.isSelectable,
-                    onTap: { configuration.onTap(emoji) }
-                ))
+            if let sections = configuration.sections {
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.emojis) { emoji in
+                            makeCell(configuration: CellConfiguration(
+                                emoji: emoji,
+                                isSelected: configuration.isSelected(emoji),
+                                isSelectable: configuration.isSelectable,
+                                onTap: { configuration.onTap(emoji) }
+                            ))
+                        }
+                    } header: {
+                        makeSectionHeader(configuration: HeaderConfiguration(category: section.category))
+                    }
+                }
+            } else {
+                ForEach(configuration.emojis) { emoji in
+                    makeCell(configuration: CellConfiguration(
+                        emoji: emoji,
+                        isSelected: configuration.isSelected(emoji),
+                        isSelectable: configuration.isSelectable,
+                        onTap: { configuration.onTap(emoji) }
+                    ))
+                }
             }
         }
     }
@@ -135,6 +169,7 @@ public struct CompactEmojiGridStyle: EmojiGridStyle {
     public init() {}
 
     public func makeGrid(configuration: GridConfiguration) -> some View {
+        // Compact style ignores sections - it's designed for horizontal display
         LazyHGrid(rows: [GridItem(.fixed(36))], spacing: 4) {
             ForEach(configuration.emojis) { emoji in
                 makeCell(configuration: CellConfiguration(
