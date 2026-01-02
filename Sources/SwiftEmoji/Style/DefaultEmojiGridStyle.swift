@@ -42,7 +42,7 @@ public struct DefaultEmojiGridStyle: EmojiGridStyle, @unchecked Sendable {
     }
 
     public func makeGrid(configuration: GridConfiguration) -> some View {
-        let gridColumns = columns ?? [GridItem(.adaptive(minimum: cellSize))]
+        let gridColumns = columns ?? [GridItem(.adaptive(minimum: cellSize), spacing: spacing)]
 
         LazyVGrid(columns: gridColumns, spacing: spacing) {
             if let sections = configuration.sections {
@@ -87,6 +87,7 @@ public struct DefaultEmojiGridStyle: EmojiGridStyle, @unchecked Sendable {
                     .fill(Color.accentColor.opacity(0.2))
             }
         }
+//        .background(.red)
         .accessibilityLabel(configuration.emoji.name)
     }
 
