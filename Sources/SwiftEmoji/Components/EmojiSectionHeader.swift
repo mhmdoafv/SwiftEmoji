@@ -35,6 +35,7 @@ public struct EmojiSectionHeader: View {
             if let resolvedSymbolName {
                 Image(systemName: resolvedSymbolName)
                     .foregroundStyle(.secondary)
+                    .frame(width: 25)
             }
 
             if let resolvedTitle {
@@ -55,6 +56,7 @@ public struct EmojiSectionHeader: View {
 #Preview {
     VStack(alignment: .leading, spacing: 16) {
         EmojiSectionHeader("Favorites", systemImage: "star")
+        Divider()
         ForEach(EmojiCategory.allCases) { category in
             EmojiSectionHeader(category: category)
         }
