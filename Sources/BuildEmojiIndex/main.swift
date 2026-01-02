@@ -6,12 +6,13 @@
 ///   swift run BuildEmojiIndex --source blended --locales en,ja,ko
 ///   swift run BuildEmojiIndex --source blended --all-locales
 ///
-/// Sources:
-///   gemoji   - GitHub Gemoji (English only, with shortcodes)
-///   cldr     - Unicode CLDR (localized, no shortcodes)
-///   blended  - CLDR + Gemoji (localized with shortcodes) [recommended]
-///   apple    - Apple CoreEmoji (macOS only)
-///   apple-blended - Apple + Gemoji (macOS only)
+/// Recommended (works on Linux/CI, matches app defaults):
+///   blended - CLDR + Gemoji (localized, standard order) [default]
+///
+/// Other sources (not recommended):
+///   gemoji - GitHub Gemoji (English only)
+///   cldr   - Unicode CLDR (no standard order)
+///   apple* - macOS only, not available on Linux/CI
 
 import Foundation
 import SwiftEmojiIndex
@@ -61,17 +62,20 @@ struct CLIOptions {
 }
 
 func printHelp() {
-    var sources = """
-      gemoji        GitHub Gemoji (English only, with shortcodes)
-      cldr          Unicode CLDR (localized, no shortcodes)
-      blended       CLDR + Gemoji (localized with shortcodes) [recommended]
+    let recommendedSources = """
+      blended       CLDR + Gemoji (localized, standard order) [default]
+    """
+
+    var otherSources = """
+      gemoji        GitHub Gemoji (English only)
+      cldr          Unicode CLDR (localized, no standard order)
     """
 
     #if os(macOS)
-    sources += """
+    otherSources += """
 
-      apple         Apple CoreEmoji (macOS only)
-      apple-blended Apple CoreEmoji + Gemoji (macOS only)
+      apple-blended Apple + Gemoji (macOS, standard order)
+      apple         Apple CoreEmoji (macOS, no standard order)
     """
     #endif
 
@@ -87,20 +91,20 @@ func printHelp() {
       -l, --locales <CODES>   Comma-separated locale codes (e.g., en,ja,ko)
       -a, --all-locales       Build all available locales
 
-    SOURCES:
-    \(sources)
+    RECOMMENDED SOURCES (matches app defaults, standard emoji order):
+    \(recommendedSources)
+
+    OTHER SOURCES (no standard emoji order):
+    \(otherSources)
 
     EXAMPLES:
-      # Interactive mode
+      # Interactive mode (recommended)
       swift run BuildEmojiIndex
 
-      # Build English fallback from Gemoji
-      swift run BuildEmojiIndex --source gemoji
-
-      # Build specific locales with CLDR + Gemoji
+      # Build specific locales (recommended)
       swift run BuildEmojiIndex --source blended --locales en,ja,ko,zh
 
-      # Build all available CLDR locales
+      # Build all available locales
       swift run BuildEmojiIndex --source blended --all-locales
 
     FILES:
@@ -218,12 +222,12 @@ struct FallbackEntry: Codable {
 // MARK: - Sources
 
 enum Source: String, CaseIterable {
-    case gemoji = "GitHub Gemoji (English, with shortcodes)"
-    case cldr = "Unicode CLDR (100+ languages)"
-    case blended = "CLDR + Gemoji (localized names with shortcodes)"
+    case blended = "CLDR + Gemoji (localized, standard order) [RECOMMENDED]"
+    case gemoji = "GitHub Gemoji (English only, no localization)"
+    case cldr = "Unicode CLDR (localized, NO standard order)"
     #if os(macOS)
-    case apple = "Apple CoreEmoji (macOS, highest quality localization)"
-    case appleBlended = "Apple CoreEmoji + Gemoji (macOS, localized with shortcodes)"
+    case appleBlended = "Apple + Gemoji (macOS, standard order)"
+    case apple = "Apple CoreEmoji (macOS, NO standard order)"
     #endif
 }
 
@@ -330,46 +334,148 @@ func buildFromGemoji(_ entries: [GemojiEntry]) -> [FallbackEntry] {
 
 #if os(macOS)
 func buildFromApple(_ entries: [EmojiRawEntry], gemojiEntries: [GemojiEntry]?) -> [FallbackEntry] {
-    // Index gemoji by character for enrichment (categories, shortcodes, etc.)
-    var gemojiByChar: [String: GemojiEntry] = [:]
-    if let gemoji = gemojiEntries {
-        for entry in gemoji {
-            gemojiByChar[entry.emoji] = entry
-        }
+    // Index Apple entries by character for fast lookup
+    var appleByChar: [String: EmojiRawEntry] = [:]
+    for entry in entries {
+        appleByChar[entry.character] = entry
     }
 
-    return entries.map { entry in
-        let gemoji = gemojiByChar[entry.character]
+    // If we have Gemoji, use its ORDER and enrich with Apple names
+    if let gemoji = gemojiEntries {
+        var results: [FallbackEntry] = []
+        var seen = Set<String>()
 
-        return FallbackEntry(
+        // Iterate in Gemoji order (standard emoji order)
+        for gemojiEntry in gemoji {
+            seen.insert(gemojiEntry.emoji)
+
+            if let apple = appleByChar[gemojiEntry.emoji] {
+                // Apple name + Gemoji metadata
+                results.append(FallbackEntry(
+                    character: gemojiEntry.emoji,
+                    name: apple.name,
+                    category: gemojiEntry.category,
+                    shortcodes: gemojiEntry.aliases,
+                    keywords: Array(Set(apple.keywords + gemojiEntry.tags)).sorted(),
+                    supportsSkinTone: gemojiEntry.skinTones ?? false
+                ))
+            } else {
+                // Gemoji only
+                results.append(FallbackEntry(
+                    character: gemojiEntry.emoji,
+                    name: gemojiEntry.description,
+                    category: gemojiEntry.category,
+                    shortcodes: gemojiEntry.aliases,
+                    keywords: gemojiEntry.tags.sorted(),
+                    supportsSkinTone: gemojiEntry.skinTones ?? false
+                ))
+            }
+        }
+
+        // Add any Apple-only emoji at the end
+        for entry in entries {
+            if !seen.contains(entry.character) {
+                results.append(FallbackEntry(
+                    character: entry.character,
+                    name: entry.name,
+                    category: entry.category,
+                    shortcodes: entry.shortcodes,
+                    keywords: entry.keywords.sorted(),
+                    supportsSkinTone: entry.supportsSkinTone
+                ))
+            }
+        }
+
+        return results
+    }
+
+    // No Gemoji - just return Apple entries (no guaranteed order)
+    return entries.map { entry in
+        FallbackEntry(
             character: entry.character,
             name: entry.name,
-            category: gemoji?.category ?? entry.category,  // Get category from Gemoji
-            shortcodes: gemoji?.aliases ?? entry.shortcodes,
-            keywords: Array(Set(entry.keywords + (gemoji?.tags ?? []))).sorted(),
-            supportsSkinTone: gemoji?.skinTones ?? entry.supportsSkinTone
+            category: entry.category,
+            shortcodes: entry.shortcodes,
+            keywords: entry.keywords.sorted(),
+            supportsSkinTone: entry.supportsSkinTone
         )
     }
 }
 #endif
 
 func buildFromCLDR(_ annotations: [String: CLDRAnnotation], gemojiEntries: [GemojiEntry]?) -> [FallbackEntry] {
-    // Index gemoji by character for enrichment
-    var gemojiByChar: [String: GemojiEntry] = [:]
-    if let gemoji = gemojiEntries {
-        for entry in gemoji {
-            gemojiByChar[entry.emoji] = entry
-        }
-    }
-
     let skinToneModifiers: Set<Unicode.Scalar> = [
         "\u{1F3FB}", "\u{1F3FC}", "\u{1F3FD}", "\u{1F3FE}", "\u{1F3FF}"
     ]
 
+    // If we have Gemoji, use its ORDER and enrich with CLDR names
+    if let gemoji = gemojiEntries {
+        // Index CLDR by character for fast lookup
+        var cldrByChar: [String: CLDRAnnotation] = [:]
+        for (character, annotation) in annotations {
+            cldrByChar[character] = annotation
+        }
+
+        var results: [FallbackEntry] = []
+        var seen = Set<String>()
+
+        // Iterate in Gemoji order (standard emoji order)
+        for gemojiEntry in gemoji {
+            seen.insert(gemojiEntry.emoji)
+
+            if let cldr = cldrByChar[gemojiEntry.emoji] {
+                // CLDR name + Gemoji metadata
+                let name = cldr.tts?.first ?? gemojiEntry.description
+                let keywords = cldr.default ?? []
+
+                results.append(FallbackEntry(
+                    character: gemojiEntry.emoji,
+                    name: name,
+                    category: gemojiEntry.category,
+                    shortcodes: gemojiEntry.aliases,
+                    keywords: Array(Set(keywords + gemojiEntry.tags)).sorted(),
+                    supportsSkinTone: gemojiEntry.skinTones ?? false
+                ))
+            } else {
+                // Gemoji only
+                results.append(FallbackEntry(
+                    character: gemojiEntry.emoji,
+                    name: gemojiEntry.description,
+                    category: gemojiEntry.category,
+                    shortcodes: gemojiEntry.aliases,
+                    keywords: gemojiEntry.tags.sorted(),
+                    supportsSkinTone: gemojiEntry.skinTones ?? false
+                ))
+            }
+        }
+
+        // Add any CLDR-only emoji at the end (rare, but possible for new emoji)
+        for (character, annotation) in annotations {
+            if character.unicodeScalars.contains(where: { skinToneModifiers.contains($0) }) {
+                continue
+            }
+            if !seen.contains(character) {
+                let name = annotation.tts?.first ?? character
+                let keywords = annotation.default ?? []
+
+                results.append(FallbackEntry(
+                    character: character,
+                    name: name,
+                    category: "Unknown",
+                    shortcodes: [],
+                    keywords: keywords.sorted(),
+                    supportsSkinTone: false
+                ))
+            }
+        }
+
+        return results
+    }
+
+    // No Gemoji - fall back to codepoint order (no standard order)
     var entries: [FallbackEntry] = []
 
     for (character, annotation) in annotations {
-        // Skip skin tone variants
         if character.unicodeScalars.contains(where: { skinToneModifiers.contains($0) }) {
             continue
         }
@@ -377,16 +483,13 @@ func buildFromCLDR(_ annotations: [String: CLDRAnnotation], gemojiEntries: [Gemo
         let name = annotation.tts?.first ?? character
         let keywords = annotation.default ?? []
 
-        // Enrich with Gemoji data if available
-        let gemoji = gemojiByChar[character]
-
         entries.append(FallbackEntry(
             character: character,
             name: name,
-            category: gemoji?.category ?? "Unknown",
-            shortcodes: gemoji?.aliases ?? [],
-            keywords: Array(Set(keywords + (gemoji?.tags ?? []))).sorted(),
-            supportsSkinTone: gemoji?.skinTones ?? false
+            category: "Unknown",
+            shortcodes: [],
+            keywords: keywords.sorted(),
+            supportsSkinTone: false
         ))
     }
 
