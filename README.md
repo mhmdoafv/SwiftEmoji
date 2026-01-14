@@ -213,6 +213,12 @@ let emoji = Emoji("🎨")
 // Lookup with full metadata
 if let emoji = await Emoji.lookup("🎨") {
     print(emoji.name) // "artist palette"
+}
+
+// Skin tone support
+let modified = emoji.withSkinTone(.medium)
+```
+
 
 ## Customization
 
@@ -295,43 +301,6 @@ let workTracker = EmojiUsageTracker(storageKey: "Work.emojiUsage")
 ```
 
 
-## Models
-
-### Emoji
-
-```swift
-public struct Emoji {
-    let character: String        // "😀"
-    let name: String             // "grinning face"
-    let category: EmojiCategory
-    let shortcodes: [String]     // ["grinning"]
-    let keywords: [String]       // ["face", "grin", "happy"]
-    let supportsSkinTone: Bool
-}
-
-// Direct init (no metadata)
-let emoji = Emoji("🎨")
-
-// Lookup with full metadata
-if let emoji = await Emoji.lookup("🎨") {
-    print(emoji.name) // "artist palette"
-}
-```
-
-### EmojiCategory
-
-```swift
-public enum EmojiCategory {
-    case smileysAndEmotion
-    case peopleAndBody
-    case animalsAndNature
-    case foodAndDrink
-    case travelAndPlaces
-    case activities
-    case objects
-    case symbols
-    case flags
-}
 ## How It Works
 
 The shared instance automatically selects the best data source for your platform:
