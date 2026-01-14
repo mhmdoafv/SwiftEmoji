@@ -283,6 +283,56 @@ let workTracker = EmojiUsageTracker(storageKey: "Work.emojiUsage")
 ```
 
 
+## Models
+
+### Emoji
+
+```swift
+public struct Emoji {
+    let character: String        // "😀"
+    let name: String             // "grinning face"
+    let category: EmojiCategory
+    let shortcodes: [String]     // ["grinning"]
+    let keywords: [String]       // ["face", "grin", "happy"]
+    let supportsSkinTone: Bool
+}
+
+// Direct init (no metadata)
+let emoji = Emoji("🎨")
+
+// Lookup with full metadata
+if let emoji = await Emoji.lookup("🎨") {
+    print(emoji.name) // "artist palette"
+}
+```
+
+### EmojiCategory
+
+```swift
+public enum EmojiCategory {
+    case smileysAndEmotion
+    case peopleAndBody
+    case animalsAndNature
+    case foodAndDrink
+    case travelAndPlaces
+    case activities
+    case objects
+    case symbols
+    case flags
+}
+```
+
+### SkinTone
+
+```swift
+public enum SkinTone {
+    case none, light, mediumLight, medium, mediumDark, dark
+}
+
+let modified = emoji.withSkinTone(.medium)  // Returns emoji character with modifier
+```
+
+
 ## How It Works
 
 ### Data Sources
@@ -299,6 +349,8 @@ The shared instance automatically uses the best source for your platform and loc
 
 The default configuration blends these automatically - order & metadata from Gemoji (standard emoji keyboard order), localized names from CLDR or Apple.
 
+See [Data Sources](docs/SwiftEmojiIndex/DataSources.md) for custom sources and blending.
+
 ### Localization
 
 ```swift
@@ -312,6 +364,8 @@ await provider.setLocale(Locale(identifier: "ja"))
 let japanese = EmojiIndexProvider(locale: Locale(identifier: "ja"))
 ```
 
+See [Localization](docs/SwiftEmojiIndex/Localization.md) for locale manager and platform-specific options.
+
 ### Caching
 
 Data is cached to disk at `~/Library/Caches/[bundleID]/SwiftEmojiIndex/[sourceId].json` and refreshes automatically when stale (default: 24 hours).
@@ -323,6 +377,8 @@ try await EmojiIndexProvider.shared.refresh()
 // Clear cache and reload
 try await EmojiIndexProvider.shared.clearCacheAndReload()
 ```
+
+See [Cache Management](docs/SwiftEmojiIndex/CacheManagement.md) for detailed cache control.
 
 ### Fallback
 
@@ -342,33 +398,7 @@ Build fallback files with the CLI:
 swift run BuildEmojiIndex
 ```
 
-### Custom Data Sources
-
-```swift
-struct MySource: EmojiDataSource {
-    let identifier = "my-source"
-    let displayName = "My Source"
-
-    func fetch() async throws -> [EmojiRawEntry] {
-        // Fetch from your source
-    }
-}
-
-let provider = EmojiIndexProvider(source: MySource())
-```
-
-### Custom Cache
-
-```swift
-struct MyCache: EmojiCache {
-    func load(for sourceIdentifier: String) async throws -> (entries: [EmojiRawEntry], lastUpdated: Date)? { }
-    func save(_ entries: [EmojiRawEntry], for sourceIdentifier: String) async throws { }
-    func clear(for sourceIdentifier: String) async throws { }
-    func clearAll() async throws { }
-}
-
-let provider = EmojiIndexProvider(source: GemojiDataSource.shared, cache: MyCache())
-```
+See [Fallback Files](docs/SwiftEmojiIndex/FallbackFiles.md) for automation and file format.
 
 ### Favorites Scoring
 
