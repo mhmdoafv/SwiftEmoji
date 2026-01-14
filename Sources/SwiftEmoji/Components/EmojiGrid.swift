@@ -285,7 +285,7 @@ extension View {
         ScrollView {
             // Show favorites when not searching
             if searchText.isEmpty && !favorites.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     EmojiSectionHeader("Favorites", systemImage: "star")
                     EmojiGrid(emojis: favorites) { emoji in
                         EmojiUsageTracker.shared.recordUse(emoji.character)

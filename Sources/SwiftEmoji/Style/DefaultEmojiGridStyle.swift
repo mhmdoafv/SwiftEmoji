@@ -92,16 +92,7 @@ public struct DefaultEmojiGridStyle: EmojiGridStyle, @unchecked Sendable {
     }
 
     public func makeSectionHeader(configuration: HeaderConfiguration) -> some View {
-        HStack {
-            Image(systemName: configuration.category.symbolName)
-                .foregroundStyle(.secondary)
-            Text(configuration.category.displayName)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.vertical, 8)
+        EmojiSectionHeader(category: configuration.category)
     }
 }
 
